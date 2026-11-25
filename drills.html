@@ -1,0 +1,634 @@
+<title>Pacific Shield Drills</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: an ATO-style working sheet. Tab strip of drills, one scenario card, answer controls, debrief. */
+:root{
+  --bg:#e9ece6; --panel:#f8faf6; --ink:#1b2320; --muted:#5b6660; --line:#c5ccc2;
+  --accent:#a95f00; --accent-ink:#ffffff; --accent-soft:#f3e3c9;
+  --ok:#2b7a4b; --ok-soft:#d9eee0; --bad:#b13a2e; --bad-soft:#f6dcd8;
+  --hex:#d6dbd2;
+  --f-display:"Barlow Condensed","Arial Narrow",Arial,sans-serif;
+  --f-body:"Barlow",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"JetBrains Mono",ui-monospace,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#111513; --panel:#192019; --ink:#e2e8e1; --muted:#97a39b; --line:#2f3a33;
+  --accent:#f0a540; --accent-ink:#1a1206; --accent-soft:#3a2a12;
+  --ok:#6fcf93; --ok-soft:#173023; --bad:#f08376; --bad-soft:#3a1c18; --hex:#1f2822; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#111513; --panel:#192019; --ink:#e2e8e1; --muted:#97a39b; --line:#2f3a33;
+  --accent:#f0a540; --accent-ink:#1a1206; --accent-soft:#3a2a12;
+  --ok:#6fcf93; --ok-soft:#173023; --bad:#f08376; --bad-soft:#3a1c18; --hex:#1f2822; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:16px;line-height:1.5;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:20px 48px}
+.wrap{max-width:980px;margin:0 auto;display:flex;flex-direction:column;gap:18px}
+header{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px;border-bottom:2px solid var(--ink);padding-bottom:10px}
+h1{font-family:var(--f-display);font-weight:700;font-size:2.1rem;letter-spacing:.02em;text-transform:uppercase;margin:0;line-height:1}
+h1 small{display:block;font-size:.8rem;letter-spacing:.18em;color:var(--muted);font-weight:600;margin-bottom:6px}
+h2{font-family:var(--f-display);font-weight:600;font-size:1.45rem;margin:0;text-wrap:balance;letter-spacing:.01em}
+h3{font-family:var(--f-display);font-weight:600;font-size:1.1rem;margin:0;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.score{font-family:var(--f-mono);font-size:.85rem;color:var(--muted);font-variant-numeric:tabular-nums;text-align:right}
+.score b{color:var(--ink)}
+nav{display:flex;flex-wrap:wrap;gap:6px}
+nav button{font-family:var(--f-display);font-size:1.05rem;font-weight:600;letter-spacing:.04em;text-transform:uppercase;
+  background:transparent;color:var(--muted);border:1px solid var(--line);border-radius:3px;padding:6px 14px;cursor:pointer}
+nav button[aria-selected="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+nav button:hover{border-color:var(--ink);color:var(--ink)}
+nav button[aria-selected="true"]:hover{color:var(--bg)}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.sheet{background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:20px;display:flex;flex-direction:column;gap:16px;min-width:0}
+.brief{color:var(--muted);max-width:68ch;margin:0}
+.row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px}
+.fact{border-left:3px solid var(--line);padding:2px 0 2px 10px;min-width:0}
+.fact .k{font-size:.72rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted)}
+.fact .v{font-family:var(--f-mono);font-size:.95rem;font-weight:600;overflow-wrap:anywhere}
+.fact.warn{border-left-color:var(--accent)}
+.tbl{overflow-x:auto;border:1px solid var(--line);border-radius:3px}
+table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
+th{font-size:.72rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);font-weight:600;background:var(--bg)}
+tr:last-child td{border-bottom:0}
+td.mono,.mono{font-family:var(--f-mono);font-size:.9rem}
+.btn{font-family:var(--f-display);font-size:1.05rem;font-weight:600;letter-spacing:.05em;text-transform:uppercase;
+  border-radius:3px;padding:8px 16px;cursor:pointer;border:1px solid var(--ink);background:transparent;color:var(--ink)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.choices{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:8px}
+.choice{text-align:left;font:inherit;font-size:.95rem;padding:10px 12px;border:1px solid var(--line);border-radius:3px;background:var(--bg);color:var(--ink);cursor:pointer}
+.choice:hover{border-color:var(--ink)}
+.choice.picked{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+.choice.right{border-color:var(--ok);background:var(--ok-soft)}
+.choice.wrong{border-color:var(--bad);background:var(--bad-soft)}
+.debrief{border-radius:3px;padding:14px 16px;display:flex;flex-direction:column;gap:6px}
+.debrief.good{background:var(--ok-soft);border:1px solid var(--ok)}
+.debrief.badd{background:var(--bad-soft);border:1px solid var(--bad)}
+.debrief p{margin:0;max-width:72ch}
+.debrief .verdict{font-family:var(--f-display);font-weight:700;font-size:1.25rem;text-transform:uppercase;letter-spacing:.05em}
+.good .verdict{color:var(--ok)} .badd .verdict{color:var(--bad)}
+.cite{font-family:var(--f-mono);font-size:.78rem;color:var(--muted)}
+.meter{display:flex;flex-direction:column;gap:4px;min-width:200px;flex:1}
+.meter .bar{height:10px;background:var(--hex);border-radius:2px;overflow:hidden}
+.meter .fill{height:100%;background:var(--accent)}
+.meter .fill.over{background:var(--bad)}
+.meter .lab{font-family:var(--f-mono);font-size:.82rem;display:flex;justify-content:space-between;gap:8px}
+.chip{display:inline-block;font-family:var(--f-mono);font-size:.75rem;padding:1px 7px;border-radius:2px;border:1px solid var(--line)}
+.chip.p1{border-color:var(--accent);color:var(--accent);font-weight:600}
+.chip.red{border-color:#c0392b;color:#c0392b}.chip.yellow{border-color:#b88a00;color:#b88a00}.chip.green{border-color:var(--ok);color:var(--ok)}
+select{font:inherit;font-size:.9rem;padding:5px 8px;border:1px solid var(--line);border-radius:3px;background:var(--bg);color:var(--ink)}
+label.tog{display:flex;align-items:center;gap:6px;font-size:.9rem;color:var(--muted);cursor:pointer}
+.atoline{font-family:var(--f-mono);font-size:.88rem}
+.rules{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px}
+.rules section{border-top:2px solid var(--ink);padding-top:8px;min-width:0}
+.rules ul{margin:6px 0 0;padding-left:18px;display:flex;flex-direction:column;gap:4px}
+.rules li{font-size:.94rem}
+.note{font-size:.88rem;color:var(--muted);background:var(--accent-soft);border-radius:3px;padding:10px 12px;max-width:none}
+.note b{color:var(--ink)}
+.ranges{display:flex;flex-wrap:wrap;gap:14px}
+.ranges label{display:flex;align-items:center;gap:6px;font-family:var(--f-mono);font-size:.9rem}
+.ranges input{width:56px;font:inherit;padding:4px 6px;border:1px solid var(--line);border-radius:3px;background:var(--bg);color:var(--ink)}
+@media (prefers-reduced-motion:no-preference){.debrief{animation:in .18s ease-out}@keyframes in{from{transform:translateY(4px);opacity:.6}to{transform:none;opacity:1}}}
+</style>
+
+<div class="wrap">
+  <header>
+    <h1><small>Operation Pacific Shield · Kingfish ACE</small>Planning Drills</h1>
+    <div class="score" id="score"></div>
+  </header>
+  <nav role="tablist" id="tabs">
+    <button role="tab" data-tab="mog" aria-selected="true">1 · MOG &amp; PPR</button>
+    <button role="tab" data-tab="fos" aria-selected="false">2 · FOS Build</button>
+    <button role="tab" data-tab="ato" aria-selected="false">3 · Flight Plans</button>
+    <button role="tab" data-tab="med" aria-selected="false">4 · MEDCOM</button>
+    <button role="tab" data-tab="rules" aria-selected="false">Rules</button>
+  </nav>
+  <main id="view"></main>
+</div>
+
+<script>
+/* ---------- data from the OPS User Guide (CAO 16 Oct 2026) and the C-130/C-17 loadout board ---------- */
+const AC={
+  'C-130':{u:1,  loads:{cargo:{pp:8,pax:0},mixed:{pp:2,pax:62},pax:{pp:0,pax:128}}},
+  'C-17': {u:1.5,loads:{cargo:{pp:18,pax:0},mixed:{pp:11,pax:54},pax:{pp:0,pax:102}}},
+  'C-5':  {u:3,  loads:{mixed:{pp:36,pax:73},pax:{pp:0,pax:329}}}
+};
+const DEFAULT_RANGE={'C-130':3,'C-17':4,'C-5':4};
+let RANGE={...DEFAULT_RANGE};
+const store={get(k,d){try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(e){return d}},
+             set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
+RANGE={...RANGE,...store.get('ops-ranges-v2',{})};
+
+const COUNTRY_FOS={Japan:[1,2,3,4,5],Philippines:[6,7,8,9,10],Indonesia:[11,12,15,16,17,18,19,20,21],Brunei:[13],Singapore:[22],
+  Malaysia:[14,23,24],Thailand:[25,26,30,32,33,34],Cambodia:[29],Vietnam:[27,28,31,36,37],Laos:[35],India:[38,39,40,41,42,43,44,45]};
+/* FOS tasks from the MOB board: crew count, equipment pallet positions, prerequisites */
+const TASKS={
+  1:{n:'Bed Down & Sanitation',pax:0,pp:5,kit:'tent 2 PP, forklift 3 PP',pre:[2,6,10]},
+  2:{n:'Power',pax:3,pp:3,kit:'Power Gen (3), generator 1 PP, fuel 2 PP',pre:[]},
+  3:{n:'Command & Control',pax:9,pp:1,kit:'Ops/Intel (2), C2 (2), Comm (5), satcom 1 PP',pre:[2]},
+  4:{n:'Contracts',pax:2,pp:0,kit:'Contracting (2)',pre:[]},
+  5:{n:'Ramp Security',pax:5,pp:3,kit:'Force Protection (5), Humvee 2 PP, ammo 1 PP',pre:[]},
+  6:{n:'Perimeter Security',pax:10,pp:3,kit:'Force Protection (10), Humvee 2 PP, ammo 1 PP',pre:[3]},
+  7:{n:'Missile Defense',pax:5,pp:16,kit:'Missile Defense (5), launcher 16 PP',pre:[3,6]},
+  8:{n:'Camouflage & Base Hardening',pax:0,pp:0,kit:'personnel only (turns depend on headcount)',pre:[]},
+  9:{n:'Airfield Operations',pax:13,pp:8,kit:'AF Ops (2), ATC (5), Weather (1), CFR (5), fire truck 6 PP, pickup 2 PP',pre:[6]},
+  10:{n:'Mobility Support',pax:10,pp:3,kit:'Port (10), forklift 3 PP',pre:[5]},
+  11:{n:'Integrated Combat Turns',pax:20,pp:8,kit:'Maintenance (10), AMMO (10), wrench 4 PP, bomb 2 PP, missile 2 PP',pre:[5,9,10]},
+  12:{n:'Specialized Fueling Ops',pax:5,pp:8,kit:'Refueling (5), fuel 2 PP, fuel truck 6 PP',pre:[5,9]},
+  13:{n:'Host Nation Relationships',pax:2,pp:2,kit:'Ops/Intel (2), pickup 2 PP',pre:[6]},
+  14:{n:'Health & Welfare',pax:5,pp:1,kit:'Medical (5), med kit 1 PP',pre:[1,2]},
+  15:{n:'Base Recovery',pax:10,pp:4,kit:'Engineering (10), rapid repair 4 PP',pre:[6]},
+  16:{n:'Logistics Support',pax:2,pp:4,kit:'Supply (2), fuel 2 PP, food 1 PP, water 1 PP',pre:[5,10]}
+};
+const FOS_COLOR={};
+[1,2,3,4,5,6,8,11,15,16,17,20,21,22,23,27,30,31,37,39,42,43,45].forEach(n=>FOS_COLOR[n]='green');
+[7,10,13,14,18,24,25,28,29,32,33,36,38,40,41,44].forEach(n=>FOS_COLOR[n]='yellow');
+[9,12,19,26,34,35].forEach(n=>FOS_COLOR[n]='red');
+const FULL_ACCESS=['Japan','Philippines','Thailand','Korea','Guam (US)'];
+/* op-area hexes: crisis from the EXORD, conflict from the FRAGORD */
+const OP_AREAS={
+  'Kadena AB':{crisis:[602,703,704,705,804],conflict:[704,804,407,507,607]},
+  'Andersen AFB':{crisis:[506,507,605,606,607],conflict:[405,406,505,506,605]},
+  'Yokota AB':{crisis:[308,407,508,607,708],conflict:[106,107,206,306,307]},
+  'Osan AB':{crisis:[108,207,307,308,407],conflict:[306,405,406,505,506]}
+};
+const MOBS=[{n:'Kadena AB',c:'Japan',cs:['COBRA','ARROW']},{n:'Andersen AFB',c:'Guam (US)',cs:['TIDE','RAPTOR']},
+  {n:'Yokota AB',c:'Japan',cs:['SAMURAI','ATLAS']},{n:'Osan AB',c:'Korea',cs:['MUSTANG','VIPER']}];
+
+/* ---------- helpers ---------- */
+const ri=(a,b)=>a+Math.floor(Math.random()*(b-a+1));
+const pick=a=>a[Math.floor(Math.random()*a.length)];
+const chance=p=>Math.random()<p;
+function fosObj(num){const c=Object.keys(COUNTRY_FOS).find(k=>COUNTRY_FOS[k].includes(num));return {c,num,color:FOS_COLOR[num],n:'FOS '+String(num).padStart(2,'0')}}
+function randFos(filter){const all=[];for(let i=1;i<=45;i++){const f=fosObj(i);if(!filter||filter(f))all.push(f)}return pick(all)}
+const cs=()=>pick(['REACH','ARROW','COBRA','TIDE','ATLAS','HERKY','MOOSE','SAMURAI'])+' '+String(ri(1,29)).padStart(2,'0');
+const fmtU=u=>(Math.round(u*10)/10).toString();
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+/* ---------- drill 1: MOG & PPR ---------- */
+const MOG_OPTS=[{label:'1 C-130',u:1,w:1},{label:'2 C-17',u:3,w:4},{label:'6 C-17',u:9,w:1}];
+function evalMog(s,ap){
+  let ppr=0,end=0;
+  s.ground.forEach(g=>{if(!g.departs)end+=AC[g.t].u});
+  s.reqs.forEach((r,i)=>{if(ap.has(i)){ppr+=AC[r.t].u;if(r.intent==='stay')end+=AC[r.t].u}});
+  return {ppr,end,pprCap:2*s.mog.u,pprOk:ppr<=2*s.mog.u+1e-9,endOk:end<=s.mog.u+1e-9};
+}
+function bestMog(s){
+  let best=null,n=s.reqs.length;
+  for(let m=0;m<(1<<n);m++){
+    const ap=new Set();for(let i=0;i<n;i++)if(m&(1<<i))ap.add(i);
+    const e=evalMog(s,ap);if(!e.pprOk||!e.endOk)continue;
+    let sc=ap.size*10;ap.forEach(i=>sc+=4-s.reqs[i].pri);
+    if(!best||sc>best.sc)best={sc,ap};
+  }
+  return best;
+}
+function genMog(){
+  for(let tries=0;tries<200;tries++){
+    const pool=[];MOG_OPTS.forEach(o=>{for(let i=0;i<o.w;i++)pool.push(o)});
+    const mog=pick(pool),f=randFos();
+    const types=mog.u>=3?['C-130','C-130','C-17']:['C-130'];
+    const ground=[];let g0=0;
+    for(let i=0;i<ri(0,2);i++){const t=pick(types);if(g0+AC[t].u>mog.u)break;g0+=AC[t].u;ground.push({cs:cs(),t,departs:chance(.55)})}
+    const reqs=[];const n=mog.u>=9?ri(5,7):ri(4,6);
+    for(let i=0;i<n;i++)reqs.push({cs:cs(),t:pick(types),intent:chance(.5)?'stay':'depart',pri:ri(1,3)});
+    const s={fos:f,mog,ground,reqs};
+    const b=bestMog(s);
+    if(b&&b.ap.size<reqs.length&&b.ap.size>=1)return s;
+  }
+}
+function renderMog(v){
+  const s=state.mog||(state.mog=genMog());state.mogAp=state.mogAp||new Set();
+  const done=state.mogDone;
+  v.innerHTML=`<div class="sheet">
+    <div class="row" style="justify-content:space-between"><h2>Issue PPRs for ${esc(s.fos.n)} (${esc(s.fos.c)})</h2><button class="btn" id="new">New scenario</button></div>
+    <p class="brief">You're on the CAOC ATO cell. Approve the PPRs you'd issue this turn. Approve as many as the airfield can take, and favor priority 1 traffic when you have to choose.</p>
+    <div class="facts">
+      <div class="fact warn"><div class="k">Parking MOG</div><div class="v">${s.mog.label}</div></div>
+      <div class="fact"><div class="k">Ramp conversion</div><div class="v">2 C-17 = 3 C-130 = 1 C-5</div></div>
+      <div class="fact"><div class="k">On the ground at turn start</div><div class="v">${s.ground.length?s.ground.map(g=>`${g.t} ${g.departs?'(departs)':'(stays)'}`).join(', '):'Empty ramp'}</div></div>
+    </div>
+    ${s.ground.length?`<div class="tbl"><table><thead><tr><th>Already on ramp</th><th>Type</th><th>This turn</th></tr></thead><tbody>${s.ground.map(g=>`<tr><td class="mono">${g.cs}</td><td>${g.t}</td><td>${g.departs?'Departs':'Stays on ramp'}</td></tr>`).join('')}</tbody></table></div>`:''}
+    <div class="tbl"><table><thead><tr><th>Approve</th><th>Callsign</th><th>Type</th><th>Intent at ${esc(s.fos.n)}</th><th>Priority</th></tr></thead><tbody>
+      ${s.reqs.map((r,i)=>`<tr><td><input type="checkbox" id="ppr${i}" data-i="${i}" ${state.mogAp.has(i)?'checked':''} ${done?'disabled':''} aria-label="Approve ${r.cs}"></td>
+      <td class="mono">${r.cs}</td><td>${r.t}</td><td>${r.intent==='stay'?'Land and stay':'Download and depart'}</td><td><span class="chip ${r.pri===1?'p1':''}">P${r.pri}</span></td></tr>`).join('')}
+    </tbody></table></div>
+    <div class="row"><label class="tog"><input type="checkbox" id="live" ${state.mogLive?'checked':''}> Show live tally (easier)</label></div>
+    <div class="row" id="meters"></div>
+    <div class="row"><button class="btn primary" id="check" ${done?'disabled':''}>Check my PPRs</button></div>
+    <div id="out"></div></div>`;
+  const meters=()=>{const e=evalMog(s,state.mogAp);const show=state.mogLive||done;
+    v.querySelector('#meters').innerHTML=show?meter('PPRs issued (C-130 equiv)',e.ppr,e.pprCap)+meter('On ramp at end of turn',e.end,s.mog.u):''};
+  meters();
+  v.querySelectorAll('input[data-i]').forEach(cb=>cb.onchange=()=>{const i=+cb.dataset.i;cb.checked?state.mogAp.add(i):state.mogAp.delete(i);meters()});
+  v.querySelector('#live').onchange=e=>{state.mogLive=e.target.checked;meters()};
+  v.querySelector('#new').onclick=()=>{state.mog=null;state.mogAp=null;state.mogDone=null;render()};
+  v.querySelector('#check').onclick=()=>{state.mogDone=true;const e=evalMog(s,state.mogAp),b=bestMog(s);
+    const ok=e.pprOk&&e.endOk&&state.mogAp.size===b.ap.size;
+    const lines=[];
+    lines.push(`PPRs issued: ${fmtU(e.ppr)} of ${fmtU(e.pprCap)} C-130 equivalents allowed (up to 2× MOG per turn). ${e.pprOk?'OK.':'<b>Over the limit.</b>'}`);
+    lines.push(`On the ramp at end of turn: ${fmtU(e.end)} of ${fmtU(s.mog.u)}. ${e.endOk?'OK.':'<b>MOG exceeded, so the excess aircraft can\'t stay.</b>'}`);
+    lines.push(`You approved ${state.mogAp.size}. The most this airfield can take is ${b.ap.size}. One best set: ${[...b.ap].map(i=>s.reqs[i].cs).join(', ')}.`);
+    tally('mog',ok);
+    debrief(v.querySelector('#out'),ok,ok?'Good PPR plan':(e.pprOk&&e.endOk?'Valid, but room for more':'Rejected by the station workload check'),lines,'User Guide 3.2.2, 3.3.1, 3.4');
+    renderMog(v)};
+  if(done&&state.lastOut&&state.lastOut.tab==='mog')v.querySelector('#out').innerHTML=state.lastOut.html;
+}
+function meter(lab,val,cap){const pct=Math.min(100,val/cap*100);return `<div class="meter"><div class="lab"><span>${lab}</span><span>${fmtU(val)} / ${fmtU(cap)}</span></div><div class="bar"><div class="fill ${val>cap+1e-9?'over':''}" style="width:${pct}%"></div></div></div>`}
+
+/* ---------- drill 2: FOS build ---------- */
+const CFGS=['none','cargo','mixed','pax'];
+const CFG_LABEL={none:'Not used',cargo:'Cargo only',mixed:'Mixed',pax:'Personnel only'};
+function genLoad(){
+  for(;;){
+    const n=ri(2,3),fleet=[];for(let i=0;i<n;i++)fleet.push(pick(['C-130','C-130','C-17']));
+    const pool=[2,3,5,6,9,10,11,12,13,15,16].sort(()=>Math.random()-.5);
+    const tasks=pool.slice(0,ri(2,4)).sort((x,y)=>x-y);
+    const needPP=tasks.reduce((t,k)=>t+TASKS[k].pp,0),needPax=tasks.reduce((t,k)=>t+TASKS[k].pax,0);
+    const s={kind:'load',fos:randFos(f=>f.color!=='red'||true),fleet,tasks,needPP,needPax,pick:fleet.map(()=>'none')};
+    const b=loadMin(s);if(b&&needPP>=4&&needPax>=8)return s;
+  }
+}
+function loadMin(s){
+  let best=null;const n=s.fleet.length;
+  const rec=(i,cfg)=>{if(i===n){let pp=0,pax=0,u=0;cfg.forEach((c,j)=>{if(c!=='none'){u++;pp+=AC[s.fleet[j]].loads[c].pp;pax+=AC[s.fleet[j]].loads[c].pax}});
+    if(pp>=s.needPP&&pax>=s.needPax&&(!best||u<best.u))best={u,cfg:[...cfg]};return}
+    CFGS.forEach(c=>{cfg.push(c);rec(i+1,cfg);cfg.pop()})};
+  rec(0,[]);return best;
+}
+const FIGHTER_REASONS={
+  ok:'Yes, launch the sortie',
+  tasks:'No: Establish and Operate tasks are not all complete',
+  gear:'No: red airfield without arresting gear',
+  night:'No: day-only airfield and this is a night turn',
+  mx:'No: no maintenance, ammo and fuel crews for this fighter type',
+  tokens:'No: missing a bomb, missile or fuel token',
+  moved:'No: fighters arrived from the MOB this turn',
+  access:'No: host nation revoked base access',
+  area:'No: target hex is outside your op area for this phase'
+};
+const TASK_NAMES={1:'Bed Down & Sanitation',2:'Power',3:'Command & Control',4:'Contracts',9:'Airfield Operations',10:'Mobility Support',11:'Integrated Combat Turns',12:'Specialized Fueling Ops'};
+function genFighter(){
+  for(;;){
+    const fault=chance(.3)?'ok':pick(['tasks','gear','night','mx','tokens','moved','access','area']);
+    const mob=pick(MOBS),ft=mob.n.startsWith('Andersen')||mob.n.startsWith('Osan')?'F-22':'F-16';
+    const filt=fault==='gear'?(f=>f.color==='red'):fault==='night'?(f=>f.color==='yellow'):fault==='access'?(f=>!FULL_ACCESS.includes(f.c)):null;
+    const f=randFos(filt),phase=chance(.5)?'crisis':'conflict';
+    const s={kind:'fighter',fos:f,mob:mob.n,ft,phase,color:f.color,gear:f.color!=='red'||chance(.8),light:f.color==='green'||chance(.4),night:chance(.35),
+      missing:null,mx:ft,tokens:{bomb:1,missile:1,fuel:1},moved:false,access:true,target:pick(OP_AREAS[mob.n][phase])};
+    if(fault==='tasks')s.missing=pick([1,2,3,4,9,10,11,12]);
+    if(fault==='gear')s.gear=false;
+    if(fault==='night'){s.light=false;s.night=true}
+    if(fault==='mx')s.mx=ft==='F-16'?'F-22':'F-16';
+    if(fault==='tokens')s.tokens[pick(['bomb','missile','fuel'])]=0;
+    if(fault==='moved')s.moved=true;
+    if(fault==='access')s.access=false;
+    if(fault==='area'){const other=phase==='crisis'?'conflict':'crisis';const cand=OP_AREAS[mob.n][other].filter(h=>!OP_AREAS[mob.n][phase].includes(h));if(!cand.length)continue;s.target=pick(cand)}
+    s.answer=fault;
+    const ff=fighterFaults(s);
+    if((fault==='ok'&&ff.length===0)||(ff.length===1&&ff[0]===fault))return s;
+  }
+}
+function fighterFaults(s){const f=[];
+  if(s.missing)f.push('tasks');
+  if(s.color==='red'&&!s.gear)f.push('gear');
+  if(s.night&&!(s.color==='green'||s.light))f.push('night');
+  if(s.mx!==s.ft)f.push('mx');
+  if(!s.tokens.bomb||!s.tokens.missile||!s.tokens.fuel)f.push('tokens');
+  if(s.moved)f.push('moved');
+  if(!s.access)f.push('access');
+  if(!OP_AREAS[s.mob][s.phase].includes(s.target))f.push('area');
+  return f;}
+function genSustain(){
+  const k=pick(['beddown','tax','dp','over','rp']);
+  if(k==='beddown'){const n=pick([ri(5,10),ri(11,20),ri(21,40)]),t=ri(1,6),d=n<=10?4:n<=20?2:1;
+    return {kind:'mc',q:`${n} personnel arrive at a FOS on turn ${t}. What's the last turn Bed Down & Sanitation can be finished without picking up demoralization points?`,
+      opts:[t+1,t+2,t+4,t+6].map(String),ans:String(t+d),why:`${n} personnel means ${d} turn${d>1?'s':''} (5–10: 4 turns, 11–20: 2, 21+: 1). Arrival on turn ${t} + ${d} = turn ${t+d}.`,cite:'User Guide 1.1.3.2.3–4'}}
+  if(k==='tax'){const n=chance(.5)?ri(8,24):ri(26,60),days=pick([2,4,6]),each=n<25?days/2:days;
+    const opts=[...new Set([days/2,days,days*2,1].map(String))];
+    return {kind:'mc',q:`A FOS has ${n} personnel. Over ${days} game days, how many food tokens does it pay in logistics tax? (Water and fuel are the same.)`,
+      opts,ans:String(each),why:`${n<25?'Under 25 people pay one food, water and fuel every other day':'Over 25 people pay one food, water and fuel every day'}, so ${days} days = ${each}.`,cite:'User Guide 7.4'}}
+  if(k==='dp'){const dp=ri(6,48),mp=Math.floor(dp/5);
+    return {kind:'mc',q:`The CJTF has picked up ${dp} demoralization points. How many Mission Points does that cost?`,opts:[...new Set([mp,mp+1,Math.max(0,mp-1),dp].map(String))],ans:String(mp),
+      why:`1 MP is lost for every 5 DP: ${dp} ÷ 5 rounds down to ${mp}.`,cite:'User Guide 1.1.3.2'}}
+  if(k==='over'){const x=pick([2,3]);
+    return {kind:'mc',q:`A team deploys ${x===2?'twice':'three times'} as many personnel as a FOS's tasks require, and the extras sit with no task. What does the GM roll for demoralization points at the end of the day?`,
+      opts:['4-sided die','6-sided die','10-sided die','20-sided die'],ans:x===2?'4-sided die':'10-sided die',why:'Twice as many: roll a d4. Three times as many: roll a d10.',cite:'User Guide 1.1.3.2.1'}}
+  return {kind:'mc',q:'An Ops/Intel team and vehicle are assigned to Host Nation Relationships (Task 13). After how many fully resourced turns can the team claim its first free resource chit?',
+    opts:['1','2','3','5'],ans:'2',why:'Task 13 earns 2 Resource Points per turn, and 3 RP buys one chit (food, water, tents or fuel). After 2 turns you have 4 RP.',cite:'User Guide 1.1.3.3'};
+}
+function prereqClosed(done){return [...done].every(t=>TASKS[t].pre.every(p=>done.has(p)))}
+function genPrereq(TS=TASKS,label='FOS team',skip=[8,4],cite='MOB board task prerequisites (red pentagons)'){
+  for(;;){
+    const done=new Set();
+    const TASKS=TS;
+    for(let i=0;i<ri(1,6);i++){const avail=Object.keys(TASKS).map(Number).filter(t=>!done.has(t)&&!skip.includes(t)&&TASKS[t].pre.every(p=>done.has(p)));if(!avail.length)break;done.add(pick(avail))}
+    const open=Object.keys(TASKS).map(Number).filter(t=>!done.has(t)&&!skip.includes(t));
+    const can=open.filter(t=>TASKS[t].pre.length&&TASKS[t].pre.every(p=>done.has(p)));
+    const cant=open.filter(t=>TASKS[t].pre.some(p=>!done.has(p)));
+    if(!can.length||cant.length<3)continue;
+    const ans=pick(can),wrong=cant.sort(()=>Math.random()-.5).slice(0,3);
+    const opts=[ans,...wrong].sort((x,y)=>x-y).map(t=>`Task ${t}: ${TASKS[t].n}`);
+    const doneTxt=done.size?[...done].sort((x,y)=>x-y).map(t=>`${t} ${TASKS[t].n}`).join(', '):'nothing yet';
+    const why=[`Task ${ans}'s prerequisites (${TASKS[ans].pre.map(p=>p+' '+TASKS[p].n).join(', ')}) are all done.`].concat(wrong.map(t=>`Task ${t} still needs ${TASKS[t].pre.filter(p=>!done.has(p)).map(p=>p+' '+TASKS[p].n).join(' and ')}.`)).join(' ');
+    return {kind:'mc',title:'Task order',q:`Your ${label} has completed: ${doneTxt}. Which of these tasks has all of its prerequisites met so you can start it now?`,opts,ans:opts[[ans,...wrong].sort((x,y)=>x-y).indexOf(ans)],why,cite};
+  }
+}
+function genFos(){const r=Math.random();return r<.3?genLoad():r<.5?genPrereq():r<.8?genFighter():genSustain()}
+function renderFos(v){
+  const s=state.fos||(state.fos=genFos());const done=state.fosDone;
+  let body='';
+  if(s.kind==='load'){
+    body=`<h2>Load the chalk for ${esc(s.fos.n)}</h2>
+    <p class="brief">You're sending the teams and equipment for the tasks below to ${esc(s.fos.n)} (${esc(s.fos.c)}). Pick a configuration for each allocated aircraft so everything goes in one lift, using as few aircraft as you can. Spare aircraft go back to the CFACC.</p>
+    <div class="tbl"><table><thead><tr><th>Task</th><th>Kit (from the MOB board)</th><th>PAX</th><th>PP</th></tr></thead><tbody>
+    ${s.tasks.map(t=>`<tr><td>${t} · ${TASKS[t].n}</td><td style="white-space:normal;min-width:220px">${TASKS[t].kit}</td><td class="mono">${TASKS[t].pax}</td><td class="mono">${TASKS[t].pp}</td></tr>`).join('')}
+    <tr><td colspan="2"><b>Total to move</b></td><td class="mono"><b>${s.needPax}</b></td><td class="mono"><b>${s.needPP}</b></td></tr></tbody></table></div>
+    <div class="tbl"><table><thead><tr><th>Aircraft</th><th>Configuration</th><th>Pallets</th><th>PAX</th></tr></thead><tbody>
+    ${s.fleet.map((t,i)=>{const c=s.pick[i],L=c==='none'?{pp:0,pax:0}:AC[t].loads[c];return `<tr><td class="mono">${t} #${i+1}</td><td><select id="cfg${i}" data-i="${i}" ${done?'disabled':''}>${CFGS.map(o=>`<option value="${o}" ${o===c?'selected':''}>${CFG_LABEL[o]}${o!=='none'?` (${AC[t].loads[o].pp} PP / ${AC[t].loads[o].pax} PAX)`:''}</option>`).join('')}</select></td><td class="mono">${L.pp}</td><td class="mono">${L.pax}</td></tr>`}).join('')}
+    </tbody></table></div><div class="row" id="meters"></div>
+    <div class="row"><button class="btn primary" id="check" ${done?'disabled':''}>Check load plan</button></div>`;
+  } else if(s.kind==='fighter'){
+    const tasks=[1,2,3,4,9,10,11,12].map(t=>`${t} ${TASK_NAMES[t]}${s.missing===t?' ✗':' ✓'}`);
+    body=`<h2>Can ${esc(s.fos.n)} launch an ${s.ft} sortie this turn?</h2>
+    <p class="brief">${esc(s.mob)} wants an ${s.ft} sortie from ${esc(s.fos.n)} into hex ${s.target}, within 4 hexes. It's the ${s.phase} phase, so the ${s.phase==='crisis'?'EXORD':'FRAGORD'} sets your op areas. Read the FOS status and make the call.</p>
+    <div class="facts">
+      <div class="fact"><div class="k">Airfield</div><div class="v"><span class="chip ${s.color}">${s.color.toUpperCase()}</span> ${s.color==='red'?'C-17/C-130 field':s.color==='yellow'?'Day fighter ops':'Day/night fighter ops'}</div></div>
+      <div class="fact"><div class="k">Arresting gear</div><div class="v">${s.color==='red'?(s.gear?'Deployed':'Not deployed'):'N/A'}</div></div>
+      <div class="fact"><div class="k">Runway lighting</div><div class="v">${s.color==='green'?'Built in':s.light?'Deployed':'Not deployed'}</div></div>
+      <div class="fact"><div class="k">Turn</div><div class="v">${s.night?'Night':'Day'} · ${s.phase}</div></div>
+      <div class="fact warn"><div class="k">Target hex</div><div class="v">${s.target}</div></div>
+      <div class="fact"><div class="k">Fighter crews on site</div><div class="v">${s.mx} MX / AMMO / Fuels</div></div>
+      <div class="fact"><div class="k">Tokens brought to CAOC</div><div class="v">${s.tokens.bomb} bomb · ${s.tokens.missile} missile · ${s.tokens.fuel} fuel</div></div>
+      <div class="fact"><div class="k">Fighters at FOS since</div><div class="v">${s.moved?'Arrived from MOB this turn':'Previous turn'}</div></div>
+      <div class="fact"><div class="k">${esc(s.fos.c)} base access</div><div class="v">${s.access?'Granted':'Revoked'}</div></div>
+    </div>
+    <div class="fact"><div class="k">Establish &amp; Operate tasks</div><div class="v" style="font-weight:400">${tasks.join(' · ')}</div></div>
+    <div class="choices">${Object.entries(FIGHTER_REASONS).map(([k,l])=>`<button class="choice" data-a="${k}" ${done?'disabled':''}>${l}</button>`).join('')}</div>`;
+  } else {
+    body=`<h2>${s.title||'Sustainment check'}</h2><p class="brief" style="color:var(--ink);font-size:1.05rem">${esc(s.q)}</p>
+    <div class="choices">${s.opts.map(o=>`<button class="choice" data-a="${esc(o)}" ${done?'disabled':''}>${esc(o)}</button>`).join('')}</div>`;
+  }
+  v.innerHTML=`<div class="sheet"><div class="row" style="justify-content:flex-end"><button class="btn" id="new">New scenario</button></div>${body}<div id="out"></div></div>`;
+  v.querySelector('#new').onclick=()=>{state.fos=null;state.fosDone=null;render()};
+  if(s.kind==='load'){
+    const meters=()=>{let pp=0,pax=0;s.pick.forEach((c,i)=>{if(c!=='none'){pp+=AC[s.fleet[i]].loads[c].pp;pax+=AC[s.fleet[i]].loads[c].pax}});
+      v.querySelector('#meters').innerHTML=meter('Pallet positions loaded',pp,s.needPP).replace('fill over','fill')+meter('PAX seats',pax,s.needPax).replace('fill over','fill');return {pp,pax}};
+    meters();
+    v.querySelectorAll('select[data-i]').forEach(sel=>sel.onchange=()=>{s.pick[+sel.dataset.i]=sel.value;renderFos(v)});
+    v.querySelector('#check').onclick=()=>{state.fosDone=true;const {pp,pax}=meters(),b=loadMin(s);const used=s.pick.filter(c=>c!=='none').length;
+      const fits=pp>=s.needPP&&pax>=s.needPax,ok=fits&&used===b.u;tally('fos',ok);
+      const lines=[`Loaded ${pp}/${s.needPP} pallet positions and ${pax}/${s.needPax} PAX seats. ${fits?'Everything fits.':'<b>Something gets left at the MOB.</b>'}`,
+        `You used ${used} aircraft. The minimum is ${b.u}: ${b.cfg.map((c,i)=>c==='none'?null:`${s.fleet[i]} #${i+1} ${CFG_LABEL[c].toLowerCase()}`).filter(Boolean).join(', ')}.`,
+        `Remember: pallets need a forklift at ${esc(s.fos.n)} to download${s.tasks.includes(10)?'. Mobility Support brings one':''}.`];
+      debrief(v.querySelector('#out'),ok,ok?'Load plan approved':fits?'Fits, but uses extra aircraft':'Load plan short',lines,'Loadout boards · MOB board task kits · User Guide 3.9, 7.2.2.1');renderFos(v)};
+  } else {
+    const ans=s.kind==='fighter'?s.answer:s.ans;
+    v.querySelectorAll('.choice').forEach(btn=>{
+      if(done){if(btn.dataset.a===ans)btn.classList.add('right');else if(btn.dataset.a===state.fosPick)btn.classList.add('wrong')}
+      btn.onclick=()=>{state.fosDone=true;state.fosPick=btn.dataset.a;const ok=btn.dataset.a===ans;tally('fos',ok);
+        let lines,cite;
+        if(s.kind==='fighter'){
+          const W={ok:'All Establish (1–4) and Operate (9–12) tasks are done, the field supports the sortie, crews match the aircraft and all three tokens are on the table.',
+            tasks:`Task ${s.missing} (${TASK_NAMES[s.missing]}) isn't complete. Every Establish and Operate task must be done before fighters launch from a FOS.`,
+            gear:'Red fields are assessed for tactical airlift only. Fighters need arresting gear deployed there first.',
+            night:'Yellow fields support day fighter ops only. Night launches need runway lighting deployed.',
+            mx:`Maintenance, ammo and fuel crews must match the platform. ${s.mx} crews can't turn an ${s.ft}.`,
+            tokens:'Each sortie consumes one bomb, one missile and one fuel token, brought to the CAOC at execution. Without them the fighter misses its takeoff window.',
+            moved:'The move from MOB to FOS takes the whole turn. Fighters can fly from the FOS starting next turn.',
+            access:'Once a host nation reverses access, no fighter sorties can launch to op areas from that location.',
+            area:`MP only count in your tasked hexes. ${esc(s.mob)}'s ${s.phase} op areas (${s.phase==='crisis'?'EXORD':'FRAGORD'}) are ${OP_AREAS[s.mob][s.phase].join(', ')}. Hex ${s.target} isn't one of them.`};
+          lines=[W[ans]];cite='User Guide 3.1.1, 3.6.1, 7.3 · EXORD/FRAGORD 3.D';
+        } else {lines=[s.why];cite=s.cite}
+        debrief(v.querySelector('#out'),ok,ok?'Correct':'Not quite',lines,cite);renderFos(v)}});
+  }
+  if(done&&state.lastOut&&state.lastOut.tab==='fos')v.querySelector('#out').innerHTML=state.lastOut.html;
+}
+
+/* ---------- drill 3: flight plan validator ---------- */
+const ATO_REASONS={
+  ok:'Approve the line',
+  range:'Reject: beyond aircraft range this turn',
+  enroute2:'Reject: second turn airborne (out of fuel)',
+  escort:'Reject: crosses an enemy hex without escort',
+  forklift:'Reject: pallets but no forklift at destination',
+  access:'Reject: no base access at destination',
+  c5fos:'Reject: C-5 into a FOS without a risk token',
+  transcom:'Reject: TRANSCOM C-5 can only land at MOBs',
+  c130only:'Reject: C-130-only runway, no risk token',
+  mog:'Reject: no PPR, destination at MOG'
+};
+function atoFaults(s){const f=[];const R=RANGE[s.t];
+  const used=s.leg1?s.leg1+1+s.leg2:s.leg2;
+  if(used>R)f.push('range');
+  if(s.wasEnroute&&s.intent==='enroute')f.push('enroute2');
+  if(s.enemy&&!s.escort)f.push('escort');
+  if(s.intent==='land'){
+    if(!s.access)f.push('access');
+    if(s.pallets&&!s.forklift)f.push('forklift');
+    if(s.t==='C-5'&&s.transcom&&s.destKind==='FOS')f.push('transcom');
+    else if(s.t==='C-5'&&s.destKind==='FOS'&&!s.risk)f.push('c5fos');
+    if(s.t!=='C-130'&&s.runway==='C-130 only'&&!s.risk)f.push('c130only');
+    if(!s.mogOk)f.push('mog');
+  }
+  return f;}
+function genAto(){
+  for(let tries=0;tries<500;tries++){
+    const fault=chance(.35)?'ok':pick(Object.keys(ATO_REASONS).filter(k=>k!=='ok'));
+    const mob=pick(MOBS);
+    let t=pick(['C-130','C-130','C-17','C-17','C-5']);
+    if(fault==='c5fos'||fault==='transcom')t='C-5';
+    if(fault==='c130only')t=pick(['C-17','C-5']);
+    const s={cs:cs(),t,mob:mob.n,transcom:false,wasEnroute:false,startHex:ri(400,780),leg1:0,leg2:1,intent:'land',destKind:'FOS',dest:randFos(),
+      access:true,runway:'Full',forklift:true,pallets:chance(.6),enemy:false,escort:false,risk:false,mogOk:true};
+    if(t==='C-5'){s.transcom=fault==='transcom'||(fault!=='c5fos'&&chance(.5));if(s.transcom){s.destKind='MOB'}else if(chance(.5)){s.destKind='FOS';s.risk=true}else s.destKind='MOB'}
+    if(fault==='transcom'){s.destKind='FOS';s.risk=chance(.5)}
+    if(fault==='c5fos'){s.destKind='FOS';s.risk=false;s.transcom=false}
+    if(s.destKind==='MOB'){const m=pick(MOBS.filter(x=>x.n!==s.mob));s.dest={n:m.n,c:m.c}}
+    const R=RANGE[t];
+    if(R>=3&&chance(.4)){s.leg1=ri(1,R-2);s.leg2=ri(1,R-1-s.leg1)}else s.leg2=ri(1,R);
+    s.wasEnroute=chance(.25);
+    if(!s.wasEnroute&&chance(.2)){s.intent='enroute';s.endHex=ri(400,780)}
+    if(t==='C-130'&&s.destKind==='FOS'&&chance(.3))s.runway='C-130 only';
+    if(!s.pallets)s.forklift=chance(.5);
+    if(chance(.3)){s.enemy=true;s.escort=true}
+    if(fault==='range'){if(s.leg1)s.leg2=R-s.leg1+ri(0,1);else s.leg2=R+ri(1,2)}
+    if(fault==='enroute2'){s.wasEnroute=true;s.intent='enroute';s.endHex=ri(400,780)}
+    if(fault==='escort'){s.enemy=true;s.escort=false}
+    if(fault==='forklift'){s.intent='land';s.pallets=true;s.forklift=false}
+    if(fault==='access'){s.intent='land';s.access=false;s.destKind='FOS';s.dest=randFos(f=>!FULL_ACCESS.includes(f.c))}
+    if(fault==='c130only'){s.intent='land';s.destKind='FOS';s.runway='C-130 only';s.risk=false;s.transcom=false;if(s.dest.n.startsWith('FOS')===false)s.dest=randFos()}
+    if(fault==='mog'){s.intent='land';s.mogOk=false}
+    if(['transcom','c5fos'].includes(fault)){s.intent='land';if(!s.dest.n.startsWith('FOS'))s.dest=randFos()}
+    const f=atoFaults(s);
+    if((fault==='ok'&&f.length===0)||(f.length===1&&f[0]===fault)){s.answer=fault;return s}
+  }
+}
+function renderAto(v){
+  const s=state.ato||(state.ato=genAto());const done=state.atoDone;
+  const used=s.leg1?`${s.leg1} + 1 (download) + ${s.leg2}`:`${s.leg2}`;
+  const start=s.wasEnroute?`Hex ${s.startHex} (airborne since last turn)`:s.mob;
+  const destTxt=s.intent==='enroute'?`Hex ${s.endHex} (ends turn airborne)`:`${s.dest.n} · ${s.dest.c}`;
+  v.innerHTML=`<div class="sheet">
+    <div class="row" style="justify-content:space-between"><h2>Verify this ATO line</h2><button class="btn" id="new">New line</button></div>
+    <p class="brief">You're the CAOC checking flight plans before issuing PPRs. Approve the line, or reject it for the one rule it breaks.</p>
+    <div class="tbl"><table class="atoline"><thead><tr><th>Callsign</th><th>Type</th><th>Apportioned</th><th>Start</th><th>Download stop</th><th>Final</th><th>Intent</th><th>Risk token</th></tr></thead>
+    <tbody><tr><td>${s.cs}</td><td>${s.t}${s.transcom?' (TRANSCOM)':''}</td><td>${s.transcom?'USTRANSCOM':esc(s.mob)}</td><td>${esc(start)}</td><td>${s.leg1?`Hex ${s.startHex+11}`:'None'}</td><td>${esc(destTxt)}</td><td>${s.intent==='land'?'Land':'Enroute'}</td><td>${s.risk?'Yes':'No'}</td></tr></tbody></table></div>
+    <div class="facts">
+      <div class="fact"><div class="k">${s.t} range (per counter)</div><div class="v">${RANGE[s.t]} hexes</div></div>
+      <div class="fact warn"><div class="k">Hexes planned</div><div class="v">${used}</div></div>
+      <div class="fact"><div class="k">Route</div><div class="v">${s.enemy?(s.escort?'Crosses enemy hex · escort tasked':'Crosses enemy hex · no escort'):'No enemy hexes'}</div></div>
+      <div class="fact"><div class="k">Cargo</div><div class="v">${s.pallets?'Palletized':'Rolling stock + PAX'}</div></div>
+      ${s.intent==='land'?`<div class="fact"><div class="k">Destination type</div><div class="v">${s.destKind}</div></div>
+      <div class="fact"><div class="k">Runway</div><div class="v">${s.runway==='Full'?'Fully operational':'C-130 Ops Only'}</div></div>
+      <div class="fact"><div class="k">Forklift at destination</div><div class="v">${s.forklift?'Yes':'No'}</div></div>
+      <div class="fact"><div class="k">${esc(s.dest.c)} access</div><div class="v">${s.access?'Granted':'Denied'}</div></div>
+      <div class="fact"><div class="k">Station workload</div><div class="v">${s.mogOk?'Ramp space available':'At MOG all turn'}</div></div>`:''}
+    </div>
+    <div class="choices">${Object.entries(ATO_REASONS).map(([k,l])=>`<button class="choice" data-a="${k}" ${done?'disabled':''}>${l}</button>`).join('')}</div>
+    <div id="out"></div></div>`;
+  v.querySelector('#new').onclick=()=>{state.ato=null;state.atoDone=null;render()};
+  const W={ok:'Range, fuel, route, destination and ramp all check out. Issue the PPR.',
+    range:`A ${s.t} moves ${RANGE[s.t]} hexes per turn, and a download stop followed by departing the same turn costs one hex. This plan needs ${used} = ${s.leg1?s.leg1+1+s.leg2:s.leg2}.`,
+    enroute2:'An aircraft that ended last turn enroute must land this turn. Two turns airborne means it runs out of fuel and is destroyed.',
+    escort:'Mobility aircraft can\'t overfly a hex with enemy capabilities unless a fighter escort launches into that hex the same turn.',
+    forklift:'Palletized cargo needs a forklift at the airfield to download. Rolling stock can download without one.',
+    access:'Without base access the host nation denies landing rights to US military mobility aircraft.',
+    c5fos:'A C-5 landing at any FOS needs a risk token and a d20 roll (1–3 crash, 4–6 broken 2 turns, 7–10 broken 1 turn, 11–20 clean).',
+    transcom:'USTRANSCOM\'s allowable level of risk only lets its C-5s land at MOBs, and a risk token can\'t waive that.',
+    c130only:'C-17s and C-5s need a risk roll for every takeoff and landing at a field degraded to C-130 Only.',
+    mog:'The CAOC issues a PPR only if total aircraft on the ground at end of turn stay within MOG.'};
+  v.querySelectorAll('.choice').forEach(btn=>{
+    if(done){if(btn.dataset.a===s.answer)btn.classList.add('right');else if(btn.dataset.a===state.atoPick)btn.classList.add('wrong')}
+    btn.onclick=()=>{state.atoDone=true;state.atoPick=btn.dataset.a;const ok=btn.dataset.a===s.answer;tally('ato',ok);
+      debrief(v.querySelector('#out'),ok,ok?'Correct call':'Missed it',[(ok?'':`Answer: ${ATO_REASONS[s.answer]}. `)+W[s.answer]],'User Guide 2.4.1.1, 2.6.2, 3.3, 3.4.3, 7.2, 8.3.4');renderAto(v)}});
+  if(done&&state.lastOut&&state.lastOut.tab==='ato')v.querySelector('#out').innerHTML=state.lastOut.html;
+}
+
+/* ---------- drill 4: MEDCOM ---------- */
+const MED_TASKS={1:{n:'Blood Support',pre:[15,16]},2:{n:'Battlefield Surgery',pre:[1]},3:{n:'Triage Team',pre:[13,15]},4:{n:'Battlefield Hospital',pre:[]},
+  5:{n:'Delayed Bedspace',pre:[15]},6:{n:'Medic Response',pre:[]},7:{n:'Minimal Care',pre:[]},8:{n:'Minimal Bedspace',pre:[15]},
+  9:{n:'Flight Surgeon',pre:[]},10:{n:'Flight Nurse',pre:[]},11:{n:'Medical Service Corps',pre:[]},12:{n:'Aeromedical Supply',pre:[11,15]},
+  13:{n:'Mortuary Affairs',pre:[]},14:{n:'Mortuary Services',pre:[]},15:{n:'Medical Logistics',pre:[11]},16:{n:'War Reserve Material',pre:[11]}};
+function genMed(){
+  const k=pick(['pre','pre','cure','time','evac','casevac','tax','air','colors','litter','litter']);
+  if(k==='litter'){const n=ri(16,58),c17=Math.ceil(n/30),c130=Math.ceil(n/15),t=pick(['C-17','C-130']),ans=t==='C-17'?c17:c130;
+    return {kind:'mc',title:'MEDEVAC load',q:`${n} litter patients need to move from a FOS to a hospital. How many ${t} MEDEVAC sorties does that take?`,
+      opts:[...new Set([ans,ans+1,Math.max(1,ans-1),ans+2])].sort((x,y)=>x-y).map(String),ans:String(ans),
+      why:`The MEDCOM loadout board shows 15 litter positions on a MEDEVAC C-130 and 30 on a MEDEVAC C-17. ${n} ÷ ${t==='C-17'?30:15} rounds up to ${ans}.`,cite:'AFMEDCOM loadout board'}}
+  if(k==='pre')return genPrereq(MED_TASKS,'hospital team',[],'AFMEDCOM board task prerequisites');
+  if(k==='cure'){const c=pick([['Red (Immediate)','Task 2: Battlefield Surgery'],['Yellow (Delayed)','Task 6: Medic Response'],['Green (Minimal)','Task 7: Minimal Care']]);
+    return {kind:'mc',title:'Hospital capability',q:`Which hospital task lets you cure ${c[0]} patients?`,opts:['Task 2: Battlefield Surgery','Task 6: Medic Response','Task 7: Minimal Care','Task 3: Triage Team'],ans:c[1],
+      why:'Battlefield Surgery (2) cures Red, Medic Response (6) cures Yellow, and Minimal Care (7) cures Green. Triage (3) sorts patients but cures none.',cite:'AFMEDCOM board'}}
+  if(k==='time'){const c=pick([['Red',3],['Yellow',2],['Green',1]]);
+    return {kind:'mc',title:'Patient tracking',q:`A ${c[0]} patient lands at a hospital with the right tasks complete. How many turns until they return to duty?`,opts:['1','2','3','4'],ans:String(c[1]),
+      why:'Treatment times: Red 3 turns, Yellow 2, Green 1. Black (expectant) patients die after 1 turn.',cite:'User Guide 9.4.10'}}
+  if(k==='evac')return {kind:'mc',title:'MEDEVAC flight',q:'What must the MEDCOM/CC bring to the CAOC for each MEDEVAC flight from a FOS to a hospital?',
+      opts:['1 bandage, pharmaceutical, IV and oxygen token','1 blood, PPE and fuel token','1 risk token','Nothing. Declaring the flight is enough'],ans:'1 bandage, pharmaceutical, IV and oxygen token',
+      why:'Every MEDEVAC flight needs one bandage, pharmaceutical, IV and oxygen token, handed to the CAOC instructor at execution, and the aircraft must be marked MEDEVAC on the ATO.',cite:'User Guide 9.4.4, 9.4.6'};
+  if(k==='casevac'){const q=pick([
+      {q:'How far can a CASEVAC HH-60 travel to rescue a downed pilot?',opts:['2 hexes','3 hexes (600 NM)','4 hexes','Unlimited in one turn'],ans:'3 hexes (600 NM)'},
+      {q:'How many patients can a CASEVAC HH-60 carry?',opts:['4','6','10','12'],ans:'6'},
+      {q:'A CASEVAC HH-60 crosses a hex with PRC forces. What do the dice look like?',opts:['MEDCOM d20 vs PRC d12, higher wins','MEDCOM d10 vs PRC d10','A d10 risk roll: 1 fails','No roll. Helicopters are ignored'],ans:'MEDCOM d20 vs PRC d12, higher wins'}]);
+    return {kind:'mc',title:'CASEVAC',q:q.q,opts:q.opts,ans:q.ans,why:'The HH-60 (Task 6 token) needs a fuel token in hand, goes up to 3 hexes, carries 6, and rolls a d20 against the PRC\'s d12 when it enters a defended hex. If it\'s shot down it returns to JBPHH.',cite:'User Guide 9.4.13'}}
+  if(k==='tax')return {kind:'mc',title:'MEDCOM sustainment',q:'MEDCOM can\'t pay its full commodity tax at the end of a game day. What happens?',
+      opts:['+5 demoralization points','+10 demoralization points','Lose a hospital','Nothing until the next block'],ans:'+5 demoralization points',
+      why:'Each day MEDCOM pays one blood, PPE, bandage, IV, oxygen, fuel and pharmaceutical. Missing it adds 5 DP.',cite:'User Guide 9.4.14'};
+  if(k==='air')return {kind:'mc',title:'Patient movement',q:'Which aircraft can move patients?',
+      opts:['Only aircraft allocated to MEDCOM and marked MEDEVAC on the ATO','Any C-17 with seats free','Any MOB aircraft heading to a hospital','Only C-5s'],ans:'Only aircraft allocated to MEDCOM and marked MEDEVAC on the ATO',
+      why:'Only MEDCOM-allocated aircraft carry patients, and each flight is either Cargo or MEDEVAC, never both. With tasks 9-12 complete, green patients are treated in the air.',cite:'User Guide 9.4.4'};
+  return {kind:'mc',title:'Triage colors',q:pick(['A patient is triaged Yellow. Which category is that?','A patient is triaged Red. Which category is that?']).replace(/x/,''),
+    opts:['Minimal','Delayed','Immediate','Expectant'],ans:null,why:'',cite:'AFMEDCOM board'};
+}
+function genMedFixed(){const q=genMed();if(q.title==='Triage colors'){const red=q.q.includes('Red');q.ans=red?'Immediate':'Delayed';q.why='On the board: Green = Minimal, Yellow = Delayed, Red = Immediate, Black = Expectant.'}return q}
+function renderMed(v){
+  const s=state.med||(state.med=genMedFixed());const done=state.medDone;
+  v.innerHTML=`<div class="sheet"><div class="row" style="justify-content:space-between"><h2>${s.title}</h2><button class="btn" id="new">New question</button></div>
+    <p class="brief" style="color:var(--ink);font-size:1.05rem">${esc(s.q)}</p>
+    <div class="choices">${s.opts.map(o=>`<button class="choice" data-a="${esc(o)}" ${done?'disabled':''}>${esc(o)}</button>`).join('')}</div><div id="out"></div></div>`;
+  v.querySelector('#new').onclick=()=>{state.med=null;state.medDone=null;render()};
+  v.querySelectorAll('.choice').forEach(btn=>{
+    if(done){if(btn.dataset.a===s.ans)btn.classList.add('right');else if(btn.dataset.a===state.medPick)btn.classList.add('wrong')}
+    btn.onclick=()=>{state.medDone=true;state.medPick=btn.dataset.a;const ok=btn.dataset.a===s.ans;tally('med',ok);
+      debrief(v.querySelector('#out'),ok,ok?'Correct':'Not quite',[(ok?'':`Answer: ${esc(s.ans)}. `)+s.why],s.cite);renderMed(v)}});
+  if(done&&state.lastOut&&state.lastOut.tab==='med')v.querySelector('#out').innerHTML=state.lastOut.html;
+}
+
+/* ---------- rules reference ---------- */
+function renderRules(v){
+  v.innerHTML=`<div class="sheet">
+  <h2>Quick reference</h2>
+  <p class="note"><b>Ranges come from the CAOC board:</b> C-130 3 hexes, C-17 4, C-5 4. Each hex is about 200 NM. If your instructor uses different numbers, change them here and every drill will use yours.</p>
+  <div class="ranges">${Object.keys(RANGE).map(t=>`<label>${t} <input type="number" min="1" max="9" id="rng-${t}" data-t="${t}" value="${RANGE[t]}"> hexes</label>`).join('')}<button class="btn" id="rng-reset">Reset</button></div>
+  <div class="rules">
+    <section><h3>Scoring</h3><ul>
+      <li>5 MP per full airfield assessment (all 10 RFIs).</li>
+      <li>5 MP per fighter sortie from a FOS into an EXORD/FRAGORD op area. None from a MOB.</li>
+      <li>Conflict kills: 20-strength 10 MP, 12-strength 7 MP, 10-strength 5 MP.</li>
+      <li>Lose 1 MP per 5 demoralization points.</li></ul></section>
+    <section><h3>Demoralization</h3><ul>
+      <li>Twice the needed personnel with no task: d4 DP. Three times: d10.</li>
+      <li>No food/water: 10 DP the first day, 30 DP per day after.</li>
+      <li>Bed down due within 4 turns (5–10 pers), 2 turns (11–20), 1 turn (21+), or 5 DP, then 10 a day.</li>
+      <li>Task 14 Health &amp; Welfare missing: 5 DP per day.</li></ul></section>
+    <section><h3>MOG and PPRs</h3><ul>
+      <li>Parking MOG governs. 2 C-17 = 3 C-130 = 1 C-5.</li>
+      <li>PPRs per turn can reach 2× MOG, but aircraft on the ground at end of turn must fit the MOG.</li>
+      <li>Base Recovery (Task 15) builds a ramp in 1 turn: 1 C-130 + 2 fighters becomes 2 C-17 + 7 fighters.</li></ul></section>
+    <section><h3>Mobility aircraft</h3><ul>
+      <li>One turn enroute is fine. Two turns airborne means destroyed.</li>
+      <li>Up to 2 downloads per turn. Departing after a download costs 1 hex.</li>
+      <li>Pallets need a forklift. No overflying enemy hexes without an escort.</li>
+      <li>C-5 at a FOS: risk token + d20. TRANSCOM C-5s: MOBs only.</li></ul></section>
+    <section><h3>Loadouts (from the board)</h3><ul>
+      <li>C-130: 8 PP, or 2 PP + 62 PAX, or 128 PAX.</li>
+      <li>C-17: 18 PP, or 11 PP + 54 PAX, or 102 PAX.</li>
+      <li>C-5: 36 PP + 73 PAX, or 329 PAX.</li></ul></section>
+    <section><h3>Fighters</h3><ul>
+      <li>Range 4 hexes and must land every turn. MOB to FOS takes a full turn, declared one turn ahead.</li>
+      <li>Sortie costs 1 bomb + 1 missile + 1 fuel. In crisis the bomb and missile come back.</li>
+      <li>Needs Establish (1–4) and Operate (9–12) done, plus MX, AMMO and fuel crews for that type.</li>
+      <li>Red field: needs arresting gear. Yellow: day only unless lighting is deployed.</li></ul></section>
+    <section><h3>Risk and combat</h3><ul>
+      <li>Risk tokens: 2 per block in crisis, 4 in conflict. Generic d10: 1 fail, 2–4 damaged 1 turn, 5–10 clean.</li>
+      <li>Combat: d(strength) vs d(strength), higher wins. F-22 rolls d20.</li>
+      <li>2-ship: second die counts half. GPS or cyber adds +1. Jammers add +2 to the PLA.</li></ul></section>
+    <section><h3>Sustainment</h3><ul>
+      <li>Under 25 pers: 1 food, water, fuel every other day. Over 25: daily.</li>
+      <li>Sealift: 4 fuel, ammo, missile and bomb per MOB per block.</li>
+      <li>Task 13: 2 RP per turn, and 3 RP buys a chit.</li></ul></section>
+    <section><h3>Op areas (fighter MP hexes)</h3><ul>
+      ${Object.entries(OP_AREAS).map(([m,a])=>`<li><b>${m}</b>: crisis ${a.crisis.join(', ')} · conflict ${a.conflict.join(', ')}</li>`).join('')}
+      <li>Full access: Japan, Korea, Philippines, Thailand. Other countries are pending a daily roll.</li></ul></section>
+  </div>
+  <h3>FOS tasks</h3>
+  <div class="tbl"><table><thead><tr><th>#</th><th>Task</th><th>Needs first</th><th>PAX</th><th>PP</th><th>Kit</th></tr></thead><tbody>
+  ${Object.entries(TASKS).map(([k,t])=>`<tr><td class="mono">${k}</td><td>${t.n}</td><td class="mono">${t.pre.join(', ')||'-'}</td><td class="mono">${t.pax}</td><td class="mono">${t.pp}</td><td style="white-space:normal;min-width:240px">${t.kit}</td></tr>`).join('')}
+  </tbody></table></div>
+  <p class="cite">Tasks 1-4 and 9-12 must all be complete before fighters fly from a FOS. Crew sizes are counted from the board icons.</p>
+  <p class="cite">Source: OPERATION PACIFIC SHIELD User Guide, CAO 16 Oct 2026, the MOB, CAOC and loadout boards, the EXORD/FRAGORD (CAO 13 Jul) and the practice Excel. Practice aid only. The guide and your instructor are the authority.</p></div>`;
+  v.querySelectorAll('input[data-t]').forEach(inp=>inp.onchange=()=>{const n=Math.max(1,Math.min(9,parseInt(inp.value)||DEFAULT_RANGE[inp.dataset.t]));RANGE[inp.dataset.t]=n;inp.value=n;store.set('ops-ranges-v2',RANGE);state.ato=null;state.atoDone=null});
+  v.querySelector('#rng-reset').onclick=()=>{RANGE={...DEFAULT_RANGE};store.set('ops-ranges-v2',{});state.ato=null;state.atoDone=null;renderRules(v)};
+}
+
+/* ---------- shell ---------- */
+const state={tab:'mog',score:{mog:[0,0],fos:[0,0],ato:[0,0],med:[0,0]}};
+function tally(k,ok){state.score[k][1]++;if(ok)state.score[k][0]++;drawScore()}
+function drawScore(){const n={mog:'MOG',fos:'FOS',ato:'ATO',med:'MED'};
+  document.getElementById('score').innerHTML='This session<br>'+Object.keys(n).map(k=>`${n[k]} <b>${state.score[k][0]}/${state.score[k][1]}</b>`).join(' · ')}
+function debrief(el,ok,verdict,lines,cite){
+  const html=`<div class="debrief ${ok?'good':'badd'}"><div class="verdict">${verdict}</div>${lines.map(l=>`<p>${l}</p>`).join('')}<div class="cite">${cite}</div></div>`;
+  state.lastOut={tab:state.tab,html};el.innerHTML=html;}
+function render(){
+  document.querySelectorAll('#tabs button').forEach(b=>b.setAttribute('aria-selected',String(b.dataset.tab===state.tab)));
+  const v=document.getElementById('view');
+  ({mog:renderMog,fos:renderFos,ato:renderAto,med:renderMed,rules:renderRules})[state.tab](v);
+}
+if(typeof document!=='undefined'){
+  document.querySelectorAll('#tabs button').forEach(b=>b.onclick=()=>{state.tab=b.dataset.tab;store.set('ops-tab',state.tab);render()});
+  const t=store.get('ops-tab','mog');if(['mog','fos','ato','med','rules'].includes(t))state.tab=t;
+  drawScore();render();
+}
+</script>
