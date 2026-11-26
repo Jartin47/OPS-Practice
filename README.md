@@ -22,7 +22,7 @@ v2.0 checked the game against the OPS video walkthrough and the execution spread
 
 v2.4 keeps everything within the User Guide (Kyle's standing rule): **Download and return partway** (guide 7.2.2.3.1) lets an aircraft download, fly back up to range − distance − 1 hexes toward the MOB and end the turn en route; it must land next turn, since two turns in a row airborne runs it out of fuel (2.4.1.1). A Base Recovery team can be airdropped only onto a non-operational FOS with no repair capability, with a risk token and no C-5s (8.3.1.2.1).
 
-v2.5 lets fighters land at a different FOS or the MOB after a sortie (guide 2.4.1.2): within 4 hexes of the target, with fighter parking room and an open runway, and they relaunch only if that FOS is ready.
+v2.5 lets fighters land at a different FOS or the MOB after a sortie (guide 2.4.1.2): as long as the hexes out to the target plus the hexes on to the landing field total 4 or less (the guide's total fighter range, 7.3.4; landing back home limits targets to 2 hexes out), with fighter parking room and an open runway, and they relaunch only if that FOS is ready.
 
 Still simplified: no alternate airfields for airlift, no country risk cards or MRA risk tokens, CASEVAC checks only the pilot's hex, satellites can't change orbit, and the computer-run MOBs in the theater roles don't use escorts or 2-ships.
 

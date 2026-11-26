@@ -330,7 +330,7 @@ function suggestHold(a,kind,list,from,to){if(!list.length)return null;const home
   return list.slice().sort((x,y)=>thr(x)-thr(y)||hexDist(x,home)-hexDist(y,home)||hexDist(x,to)-hexDist(y,to))[0]}
 function pathHexes(from,to){const n=hexDist(from,to),out=[];for(let i=1;i<=n;i++)out.push(hexLerp(from,to,i/n));return out}
 const threatAt=h=>(G.pla[h]||[]).some(t=>t.id>=1&&t.s!=='sj');
-function escortOk(h){return (UI.sorties||[]).some(s=>{if(!s.escort||s.hex!==h)return false;const f=fosByNum(s.fos);return f&&!fighterReady(f).length&&f.fighters>0&&f.stock.fuel>0&&f.stock.bomb>0&&f.stock.missile>0&&hexDist(fosHex(f),h)<=4})}
+function escortOk(h){return (UI.sorties||[]).some(s=>{if(!s.escort||s.hex!==h)return false;const f=fosByNum(s.fos);return f&&!fighterReady(f).length&&f.fighters>0&&f.stock.fuel>0&&f.stock.bomb>0&&f.stock.missile>0&&sortieRange(f.num,h,s.land)<=FR})}
 // guide 7.2.1: in conflict, airlift can't overfly a hex with known PLA forces unless a fighter escorts it into that hex this turn
 function escortNeed(a){if(phase()!=='conflict'||!a.plan||a.plan.dest==null||a.plan.dest==='')return [];const HI=holdInfo(a);const pts=a.plan.via?[locHex(a),FOS_HEX[+a.plan.via],destHex(a.plan.dest)]:HI&&HI.hex!=null?(HI.kind==='enroute'?[locHex(a),HI.hex]:[locHex(a),destHex(a.plan.dest),HI.hex]):[locHex(a),destHex(a.plan.dest)];const hs=[];for(let i=1;i<pts.length;i++)hs.push(...pathHexes(pts[i-1],pts[i]));return [...new Set(hs)].filter(threatAt)}
 function riskLeft(a){let used=0;for(const b of G.aircraft){if(b===a)break;used+=riskNeed(b)}return (G.riskTok||0)-used}
@@ -588,21 +588,25 @@ function randomEvent(){G.aircraft.forEach(a=>{if(a.brokenT>0){a.broken=1;a.broke
   if(G.exord==='typhoon')pool.push(EVENTS[6],EVENTS[6]);if(G.exord==='shadow')pool.push(EVENTS[5]);pick(pool)();
   if(G.frag==='cyberwar'&&phase()==='conflict'&&!(G.space.commJam&&G.space.commJam.t===G.turn)){const z=d(2);G.space.commJam={z,t:G.turn};log('bad',`PLA cyber offensive: voice comms jammed in GEO zone ${z}. Sorties from zone ${z} FOS need COMM satellite coverage this turn.`)}}
 // guide 2.4.1.2: fighters must land each turn but not necessarily where they took off; the landing field decides whether they can launch again
+// Guide 7.3.4: fighters have a total range of four hexes: out to the target plus on to where they land.
+const FR=4;
+function sortieLandHex(s){return s.land==='mob'?MOBS[G.mob].hex:s.land!=null&&s.land!==''?FOS_HEX[+s.land]:FOS_HEX[+s.fos]}
+function sortieRange(fosNum,hex,land){const from=FOS_HEX[+fosNum];const lh=land==='mob'?MOBS[G.mob].hex:land!=null&&land!==''?FOS_HEX[+land]:from;return hexDist(from,hex)+hexDist(hex,lh)}
 function landWhy(L){const w=[];if(L.runway>0)w.push('runway damaged');if(!canLand(fosCountry(L.num)))w.push('no landing rights');if(FOS_COLOR[L.num]==='red'&&!L.extras.gear)w.push('red field without arresting gear');
   if(isNight()&&FOS_COLOR[L.num]==='yellow'&&!L.extras.light)w.push('day-only field at night');if(isDown(L))w.push('inoperable this turn');return w}
 function landRoom(L){return mog(L).f-L.fighters-G.moves.filter(m=>!m.done&&m.to===L.num).reduce((n,m)=>n+m.n,0)}
 function flySorties(s){s._n=0;flySortie0(s);const n=s._n;const f=fosByNum(s.fos);if(!n||!f||s.land==null||String(s.land)===String(s.fos))return;
   const surv=Math.min(n,n-(s._before-f.fighters));if(surv<=0)return;const ft=MOBS[G.mob].ft,pl=surv>1?'s':'';
-  if(s.land==='mob'){if(mobRw()>=1||hexDist(s.hex,MOBS[G.mob].hex)>4){log('bad',`${surv} ${ft}${pl} can't recover at ${MOBS[G.mob].n} and ${surv>1?'return':'returns'} to FOS ${f.num}.`);return}
+  if(s.land==='mob'){if(mobRw()>=1){log('bad',`${surv} ${ft}${pl} can't recover at ${MOBS[G.mob].n} and ${surv>1?'return':'returns'} to FOS ${f.num}.`);return}
     f.fighters-=surv;G.fightersMob+=surv;log('acc',`${surv} ${ft}${pl} ${surv>1?'recover':'recovers'} at ${MOBS[G.mob].n} instead of FOS ${f.num}. Fighters at the MOB don't fly sorties until they move to a FOS.`);return}
-  const L=fosByNum(+s.land);const why=L?landWhy(L):['not one of your FOS'];if(L&&hexDist(s.hex,fosHex(L))>4)why.push('more than 4 hexes from the target');if(L&&landRoom(L)<surv)why.push('no fighter parking left');
+  const L=fosByNum(+s.land);const why=L?landWhy(L):['not one of your FOS'];if(L&&landRoom(L)<surv)why.push('no fighter parking left');
   if(why.length){log('bad',`${surv} ${ft}${pl} can't land at FOS ${s.land} (${why[0]}), so ${surv>1?'they return':'it returns'} to FOS ${f.num}.`);return}
   f.fighters-=surv;L.fighters+=surv;const rdy=fighterReady(L);log('acc',`${surv} ${ft}${pl} ${surv>1?'land':'lands'} at FOS ${L.num} instead of FOS ${f.num}.${rdy.length?` ${surv>1?'They':'It'} can't launch from there until it's ready (${rdy[0]}).`:` ${surv>1?'They':'It'} can fly from there next turn.`}`)}
 function flySortie0(s){
   const f=fosByNum(s.fos);if(!f)return;const why=fighterReady(f);const ft=MOBS[G.mob].ft;
   if(why.length){log('bad',`${s.escort?'Escort':'Sorties'} from FOS ${f.num} scrubbed: ${why[0]}.`);return}
   const n=Math.min(s.n,2,f.fighters);if(n<1){log('bad',`FOS ${f.num}: no fighters left.`);return}
-  if(hexDist(fosHex(f),s.hex)>4){log('bad',`Hex ${s.hex} is beyond 4 hexes from FOS ${f.num}.`);return}
+  {const t=sortieRange(f.num,s.hex,s.land);if(t>FR){log('bad',`Sortie from FOS ${f.num} to hex ${s.hex} scrubbed: ${hexDist(fosHex(f),s.hex)} out plus ${t-hexDist(fosHex(f),s.hex)} to land is ${t} hexes, beyond the fighters' total range of ${FR}.`);return}}
   if(f.stock.fuel<n||f.stock.bomb<n||f.stock.missile<n){log('bad',`FOS ${f.num}: a ${n}-ship needs ${n} fuel, ${n} bomb${n>1?'s':''} and ${n} missile${n>1?'s':''}. It misses its takeoff window.`);return}
   const inArea=opAreas().includes(s.hex),mp=inArea?5*n:0,tag=n===2?`2-ship of ${ft}s`:ft;
   s._before=f.fighters;s._n=n;f.stock.fuel-=n;G.sorties+=n;G.mp+=mp;
@@ -835,19 +839,19 @@ function genFLines(){
     if(f.prog<10||f.down||!f.fighters||G.access[fosCountry(f.num)]===false)return;
     let left=Math.min(f.fighters,4),budget=f.fuel;
     while(left>0){let n=Math.min(2,left,Math.max(budget,0));if(n<=0&&Math.random()<.85)break;if(n<=0)n=1;left-=n;budget-=n;
-      const reach=areas0(m).filter(h=>hexDist(f.hex,h)<=4);if(!reach.length)break;
+      const reach=areas0(m).filter(h=>2*hexDist(f.hex,h)<=FR);if(!reach.length)break;
       const idd=reach.filter(h=>(G.pla[h]||[]).some(t=>t.id===2&&t.s!=='sj'));
       let hex=phase()==='conflict'&&idd.length?pick(idd):pick(reach);
       if(Math.random()<.25){const fl=pick(['ship','range','area','fuel']);
         if(fl==='ship'&&f.fighters>=3){n=3}
-        else if(fl==='range'){const far=ZONE_HEXES[1].concat(ZONE_HEXES[2]).filter(h=>hexDist(f.hex,h)>=5&&hexDist(f.hex,h)<=6);if(far.length)hex=pick(far)}
+        else if(fl==='range'){const far=ZONE_HEXES[1].concat(ZONE_HEXES[2]).filter(h=>hexDist(f.hex,h)>=3&&hexDist(f.hex,h)<=4);if(far.length)hex=pick(far)}
         else if(fl==='area'){const o=ZONE_HEXES[1].concat(ZONE_HEXES[2]).filter(h=>hexDist(f.hex,h)<=3&&!areas0(m).includes(h));if(o.length)hex=pick(o)}
         else if(fl==='fuel'){n=Math.min(2,f.fighters);budget=-99}}
       G.flines.push({id:id++,mob:m,fos:f.num,n,hex,dec:null});if(budget<0)break}})});
 }
 function fCheck(L,used){const f=aiFos(L.mob,L.fos),v=[];const inArea=OP_AREAS[L.mob][phase()].includes(L.hex);
   if(L.n>2)v.push({k:'ship',t:`a ${L.n}-ship breaks the 2-ship maximum`});
-  if(hexDist(f.hex,L.hex)>4)v.push({k:'range',t:`hex ${hexLabel(L.hex)} is ${hexDist(f.hex,L.hex)} hexes from FOS ${f.num}, beyond fighter range (4)`});
+  if(2*hexDist(f.hex,L.hex)>FR)v.push({k:'range',t:`hex ${hexLabel(L.hex)} is ${hexDist(f.hex,L.hex)} hexes from FOS ${f.num}: out and back is ${2*hexDist(f.hex,L.hex)}, beyond the fighters' total range (4)`});
   if(f.fuel-(used[f.num]||0)<L.n)v.push({k:'fuel',t:`FOS ${f.num} only has ${Math.max(0,f.fuel-(used[f.num]||0))} fuel left for this line`});
   if(!inArea)v.push({k:'area',t:`hex ${hexLabel(L.hex)} isn't one of ${L.mob}'s ${phase()==='crisis'?'EXORD':'FRAGORD'} op areas, so it earns nothing`});
   return v}
@@ -895,7 +899,7 @@ function autoSorties(){
   TEAMS.forEach(m=>G.ai[m].fos.forEach(f=>{
     if(f.prog<10||f.down||!f.fighters||G.access[fosCountry(f.num)]===false)return;
     if(jamBlocks(f)){jam.add(zoneOfFos(f.num));return}
-    const reach=OP_AREAS[m][phase()].filter(h=>hexDist(f.hex,h)<=4);if(!reach.length)return;
+    const reach=OP_AREAS[m][phase()].filter(h=>2*hexDist(f.hex,h)<=FR);if(!reach.length)return;
     const idd=reach.filter(h=>(G.pla[h]||[]).some(t=>t.id===2&&t.s!=='sj'));
     const k=Math.min(f.fighters,4,f.fuel);
     for(let i=0;i<k&&f.fighters>0;i++){const hex=phase()==='conflict'&&idd.length?idd[i%idd.length]:reach[i%reach.length];aiSortie(m,f,hex);n++}}));
@@ -969,7 +973,7 @@ function cjRow(){return `<div class="row small">${G.cjUsed?(G.cjTurn>=G.turn?`US
 function bindCJ(){const cjb=$('#cjbtn');if(cjb)cjb.onclick=()=>{G.cjUsed=true;G.cjTurn=G.turn+1;log('acc',`CFACC requests USSF counter-jam for turn ${G.turn+1}. It cancels one PLA satellite jammer that turn.`);save();render()}}
 function flyPanel(){
   const open=G.flines.filter(L=>!L.dec).length;
-  let h=`<div class="stack"><p class="help">Fighter lines need: a 2-ship at most, a target within 4 hexes of the FOS, enough fuel at the FOS, and a hex in that MOB's ${phase()==='crisis'?'EXORD':'FRAGORD'} op areas.${phase()==='conflict'?' In conflict, a strike needs an <b>identified</b> target (the CSpOC is finding them). A line into a hex with only unknown contacts is legal but earns sortie MP only and risks an ambush.':''} Comm jamming scrubs a zone's sorties if no COMM satellite covers it.</p>${phase()==='conflict'?cjRow():''}`;
+  let h=`<div class="stack"><p class="help">Fighter lines need: a 2-ship at most, a target within 2 hexes of the FOS (total fighter range is 4: out and back, guide 7.3.4), enough fuel at the FOS, and a hex in that MOB's ${phase()==='crisis'?'EXORD':'FRAGORD'} op areas.${phase()==='conflict'?' In conflict, a strike needs an <b>identified</b> target (the CSpOC is finding them). A line into a hex with only unknown contacts is legal but earns sortie MP only and risks an ambush.':''} Comm jamming scrubs a zone's sorties if no COMM satellite covers it.</p>${phase()==='conflict'?cjRow():''}`;
   if(!G.flines.length)return h+'<p class="muted small">No fighter lines yet. Fighters fly once a MOB has a ready FOS and its jets have moved in.</p></div>';
   h+=`<div class="row"><span class="small">${open} of ${G.flines.length} not reviewed (held if you execute).</span><button class="btn sm" id="fokall">Approve all unreviewed</button></div>`;
   G.flines.forEach(L=>{const f=aiFos(L.mob,L.fos),toks=(G.pla[L.hex]||[]).filter(t=>t.id>0);const inArea=OP_AREAS[L.mob][phase()].includes(L.hex);
@@ -1018,7 +1022,7 @@ function helpModalTheater(){const c=G.role==='caoc';if(G.role==='medcom')return 
   <ol class="steps">${c?`
     <li><b>Theater:</b> each day, split the CFACC's C-17s and C-130s among the four MOBs. Put lift where FOS are closest to ready, or where fuel is running out.</li>
     <li><b>Airlift ATO:</b> the MOBs submit a line for every aircraft. About 1 in 5 has a mistake: a round trip beyond range, a load that doesn't fit the config, pallets with no forklift, or too many aircraft for the ramp. Approve the good lines and reject the bad ones.</li>
-    <li><b>Fighter ATO:</b> once FOS are ready, the MOBs request sorties. Reject 3-ships, targets beyond 4 hexes, lines without fuel, and hexes outside that MOB's op areas. In conflict, kills only come from identified targets.</li>
+    <li><b>Fighter ATO:</b> once FOS are ready, the MOBs request sorties. Reject 3-ships, targets more than 2 hexes out (4 total, out and back), lines without fuel, and hexes outside that MOB's op areas. In conflict, kills only come from identified targets.</li>
     <li>Press <b>Execute</b>. The log shows what each wrong call cost. A good line you hold wastes lift. A bad line you approve can lose an aircraft, saturate a ramp (DP), or burn fuel for nothing.</li>`:`
     <li><b>Space (CSpOC):</b> place your satellites on turn 1. Each turn they move one position. Over the theater, use MW, ISR and SDA to look at hexes and identify PLA targets for all four MOBs.</li>
     <li><b>CCIR:</b> each turn the CFACC asks for a look at one hex. Answer it for +3 MP.</li>
@@ -1450,7 +1454,7 @@ function ftrPanel(){
   const M=MOBS[G.mob];const hexes=opAreas();
   UI.pendingMoves=UI.pendingMoves||[];UI.sorties=UI.sorties||[];
   const pend=UI.pendingMoves.reduce((n,m)=>n+m.n,0);
-  let h=`<div class="stack"><p class="help">${M.ft}s at the MOB: <b>${G.fightersMob-pend}</b>. Moving to a FOS takes a full turn, and they fly sorties starting the turn after. FOS fighter parking follows MOG (2, 7 or 42). Each sortie uses <b>1 fuel, 1 bomb, 1 missile</b> from the FOS. In crisis the bomb and missile come back. Fly 1-ships or 2-ships (the most allowed). Fighters must land every turn, but not necessarily where they took off (guide 2.4.1.2): pick another FOS within 4 hexes of the target, or the MOB. They can launch from there next turn only if that FOS is ready for fighters. A sortie into one of your ${phase()==='crisis'?'EXORD':'FRAGORD'} op areas (${hexes.join(', ')}) earns <b>5 MP</b>.${phase()==='conflict'?` In conflict you roll d${M.ft==='F-22'?20:12} against the first <b>identified</b> PLA target in the hex (find them in the Space tab). A win adds 5/7/10 MP for a 10/12/20 target, and a loss costs the fighter. A 2-ship rolls twice and adds half the second die, but loses both fighters if it fails. Each fighter still earns its 5 sortie MP. An unidentified threat ambushes first. GPS and cyber add +1. Jammers nearby can add +2 to the PLA.`:''}</p>`;
+  let h=`<div class="stack"><p class="help">${M.ft}s at the MOB: <b>${G.fightersMob-pend}</b>. Moving to a FOS takes a full turn, and they fly sorties starting the turn after. FOS fighter parking follows MOG (2, 7 or 42). Each sortie uses <b>1 fuel, 1 bomb, 1 missile</b> from the FOS. In crisis the bomb and missile come back. Fly 1-ships or 2-ships (the most allowed). Fighters must land every turn, but not necessarily where they took off (guide 2.4.1.2): pick another FOS or the MOB. The guide gives fighters a <b>total range of 4 hexes</b> (7.3.4): hexes out to the target plus hexes on to where they land. Landing back home means a target 2 hexes away at most; landing at a FOS or the MOB nearer the target lets them reach further. They can launch from there next turn only if that FOS is ready for fighters. A sortie into one of your ${phase()==='crisis'?'EXORD':'FRAGORD'} op areas (${hexes.join(', ')}) earns <b>5 MP</b>.${phase()==='conflict'?` In conflict you roll d${M.ft==='F-22'?20:12} against the first <b>identified</b> PLA target in the hex (find them in the Space tab). A win adds 5/7/10 MP for a 10/12/20 target, and a loss costs the fighter. A 2-ship rolls twice and adds half the second die, but loses both fighters if it fails. Each fighter still earns its 5 sortie MP. An unidentified threat ambushes first. GPS and cyber add +1. Jammers nearby can add +2 to the PLA.`:''}</p>`;
   h+=`<h3>Move fighters to a FOS</h3>`;
   if(!G.fos.length)h+='<p class="muted small">Select a FOS first.</p>';
   G.fos.forEach(f=>{const incoming=G.moves.filter(m=>m.to===f.num).reduce((n,m)=>n+m.n,0)+UI.pendingMoves.filter(m=>m.to===f.num).reduce((n,m)=>n+m.n,0);const room=mog(f).f-f.fighters-incoming;
@@ -1458,14 +1462,14 @@ function ftrPanel(){
   if(UI.pendingMoves.length)h+=`<div class="small">Ordered this turn: ${UI.pendingMoves.map((m,i)=>`${m.n} → FOS ${m.to} <button class="btn sm" data-unmove="${i}">×</button>`).join(' · ')}</div>`;
   h+=`<h3>Sorties this turn</h3>`;
   const need=[...new Set(G.aircraft.flatMap(a=>escortNeed(a)))];
-  if(need.length)h+=`<p class="small" style="color:var(--warn)">Airlift routes cross known PLA forces in hex ${need.map(hexLabel).join(', ')}. Send an escort into ${need.length>1?'each':'that'} hex from a FOS within 4 hexes, or those flights can't go.</p>`;
+  if(need.length)h+=`<p class="small" style="color:var(--warn)">Airlift routes cross known PLA forces in hex ${need.map(hexLabel).join(', ')}. Send an escort into ${need.length>1?'each':'that'} hex from a FOS within 2 hexes (escorts land back home), or those flights can't go.</p>`;
   if(phase()==='conflict')h+=cjRow();
   G.fos.forEach(f=>{const why=fighterReady(f);const reach=hexes.filter(x=>hexDist(fosHex(f),x)<=4);const planned=UI.sorties.filter(s=>s.fos===f.num).reduce((n,s)=>n+s.n,0);
     h+=`<div class="fos"><div class="fos-head"><b>FOS ${f.num}</b><span class="small muted">${f.fighters} fighters · ${f.stock.fuel} fuel · ${f.stock.bomb} bombs · ${f.stock.missile} missiles</span></div>`;
     if(why.length)h+=`<div class="small" style="color:var(--bad)">${why.join(' · ')}</div>`;
     else if(!f.fighters)h+=`<div class="small muted">No fighters here yet.</div>`;
-    else if(!reach.length)h+=`<div class="small" style="color:var(--bad)">No op area within 4 hexes of this FOS.</div>`;
-    else h+=`${need.filter(x=>hexDist(fosHex(f),x)<=4).map(x=>{const on=UI.sorties.some(s=>s.escort&&s.hex===x);return `<div class="row small">${on?`Escort set for hex ${hexLabel(x)}`:`<button class="btn sm" data-escort="${f.num}|${x}">Escort airlift through hex ${hexLabel(x)}</button>`}</div>`}).join('')}<div class="row small"><select id="sx-${f.num}" aria-label="Target hex">${reach.map(x=>`<option value="${x}">Hex ${x}${phase()==='conflict'&&(G.pla[x]||[]).some(t=>t.id>0)?' · PLA '+G.pla[x].filter(t=>t.id>0).map(t=>t.id===2?TOKEN_TAG(t):'?').join('/'):''}${gpsHexes().has(x)?' · GPS':''}${G.space.cyberHex===x?' · cyber':''}</option>`).join('')}</select><select id="sn-${f.num}" aria-label="Formation"><option value="2" ${f.fighters>=2?'':'disabled'}>2-ship</option><option value="1" ${f.fighters>=2?'':'selected'}>1-ship</option></select><select id="sl-${f.num}" aria-label="Where the fighters land"><option value="${f.num}">Land back at FOS ${f.num}</option>${G.fos.filter(L=>L!==f).map(L=>{const w=landWhy(L);return `<option value="${L.num}" ${w.length?'disabled':''}>Land at FOS ${L.num}${w.length?` (${w[0]})`:fighterReady(L).length?' (not ready to relaunch)':''}</option>`}).join('')}<option value="mob">Recover at the MOB</option></select><button class="btn sm" data-sortie="${f.num}">Add sortie</button>${planned?`<span>${UI.sorties.filter(s=>s.fos===f.num).map(s=>`${s.n}-ship${s.escort?' escort':''} → ${hexLabel(s.hex)}${s.land!=null&&String(s.land)!==String(s.fos)?`, lands ${s.land==='mob'?'MOB':'FOS '+s.land}`:''}`).join(', ')} <button class="btn sm" data-unsortie="${f.num}">Clear</button></span>`:''}</div>`;
+    else if(!reach.length)h+=`<div class="small" style="color:var(--bad)">No op area within 4 hexes of this FOS, even landing elsewhere.</div>`;
+    else h+=`${need.filter(x=>2*hexDist(fosHex(f),x)<=FR).map(x=>{const on=UI.sorties.some(s=>s.escort&&s.hex===x);return `<div class="row small">${on?`Escort set for hex ${hexLabel(x)}`:`<button class="btn sm" data-escort="${f.num}|${x}">Escort airlift through hex ${hexLabel(x)}</button>`}</div>`}).join('')}<div class="row small"><select id="sx-${f.num}" aria-label="Target hex">${reach.map(x=>`<option value="${x}">Hex ${x} · ${hexDist(fosHex(f),x)} out${phase()==='conflict'&&(G.pla[x]||[]).some(t=>t.id>0)?' · PLA '+G.pla[x].filter(t=>t.id>0).map(t=>t.id===2?TOKEN_TAG(t):'?').join('/'):''}${gpsHexes().has(x)?' · GPS':''}${G.space.cyberHex===x?' · cyber':''}</option>`).join('')}</select><select id="sn-${f.num}" aria-label="Formation"><option value="2" ${f.fighters>=2?'':'disabled'}>2-ship</option><option value="1" ${f.fighters>=2?'':'selected'}>1-ship</option></select><select id="sl-${f.num}" aria-label="Where the fighters land"><option value="${f.num}">Land back at FOS ${f.num}</option>${G.fos.filter(L=>L!==f).map(L=>{const w=landWhy(L);return `<option value="${L.num}" ${w.length?'disabled':''}>Land at FOS ${L.num}${w.length?` (${w[0]})`:fighterReady(L).length?' (not ready to relaunch)':''}</option>`}).join('')}<option value="mob">Recover at the MOB</option></select><button class="btn sm" data-sortie="${f.num}">Add sortie</button>${planned?`<span>${UI.sorties.filter(s=>s.fos===f.num).map(s=>`${s.n}-ship${s.escort?' escort':''} → ${hexLabel(s.hex)}${s.land!=null&&String(s.land)!==String(s.fos)?`, lands ${s.land==='mob'?'MOB':'FOS '+s.land}`:''}`).join(', ')} <button class="btn sm" data-unsortie="${f.num}">Clear</button></span>`:''}</div>`;
     h+='</div>'});
   return h+'</div>';
 }
@@ -1510,7 +1514,7 @@ function helpModal(){return `<div class="overlay" id="ov"><div class="modal" rol
     <li><b>Airfields:</b> select up to 4 FOS. Ask the 5 free RFIs and pick the categories that matter. Ramp sets MOG, Mobility gives a forklift, and Bed Down, Fuel and Security fill kits.</li>
     <li><b>Airlift ATO:</b> give each aircraft a destination and load task kits and commodities. Watch range, MOG and forklifts. The CAOC rejects bad lines when you execute.</li>
     <li><b>Tasks</b> complete at the end of the turn their kit lands, once their prerequisites are done. Bed Down takes 1–4 turns depending on headcount.</li>
-    <li><b>Fighters:</b> move them from the MOB to a ready FOS (takes 1 turn), stock fuel, bombs and missiles there, then fly sorties into your op-area hexes within 4 hexes.</li>
+    <li><b>Fighters:</b> move them from the MOB to a ready FOS (takes 1 turn), stock fuel, bombs and missiles there, then fly sorties into your op-area hexes. Total fighter range is 4 hexes, out plus landing.</li>
     <li><b>Space (CSpOC):</b> satellites move each turn. When one is over your theater, use it to look at hexes and identify PLA targets, aim GPS, and cover your GEO zones with COMM, weather and missile warning. New launches come every other turn.</li>
     <li><b>MOB &amp; TRANSCOM:</b> ask CONUS for kits you're short of. Two C-5s every other turn.</li>
     <li>Press <b>Execute turn</b>. A day is 4 turns and turns 3–4 are night. Every 2 turns is one OPS block: each new block brings sealift, a new aircraft allocation and fresh risk tokens. Each day ends with logistics tax (taxed food and water go back to the MOB), DP checks and new access rolls. If a country revokes access, you get 2 turns to fly aircraft out before anything left there is trapped.</li>
@@ -1663,7 +1667,8 @@ function bind(){
   document.querySelectorAll('[data-unmove]').forEach(b=>b.onclick=()=>{UI.pendingMoves.splice(+b.dataset.unmove,1);render()});
   document.querySelectorAll('[data-sortie]').forEach(b=>b.onclick=()=>{const n=+b.dataset.sortie;const f=fosByNum(n);const planned=UI.sorties.filter(s=>s.fos===n).reduce((x,s)=>x+s.n,0);
     const k=Math.min(2,f.fighters-planned,parseInt($('#sn-'+n).value)||1);if(k<1){b.textContent='No free fighters';return}const hex=+$('#sx-'+n).value,lv=$('#sl-'+n)?$('#sl-'+n).value:String(n);const land=lv==='mob'?'mob':+lv;
-    if(land!==n){const lh=land==='mob'?MOBS[G.mob].hex:FOS_HEX[land];if(hexDist(hex,lh)>4){b.textContent=`Too far: ${land==='mob'?'the MOB':'FOS '+land} is ${hexDist(hex,lh)} hexes from the target (max 4)`;return}
+    {const t=sortieRange(n,hex,land),out=hexDist(FOS_HEX[n],hex);if(t>FR){b.textContent=`Too far: ${out} out + ${t-out} to ${land==='mob'?'the MOB':land===n?'land back at FOS '+n:'FOS '+land} = ${t} hexes (total range 4)`;return}}
+    if(land!==n){
       if(land!=='mob'){const L=fosByNum(land);const inbound=UI.sorties.filter(x=>x.land===land&&x.fos!==land).reduce((q,x)=>q+x.n,0);if(landRoom(L)-inbound<k){b.textContent=`No fighter parking left at FOS ${land}`;return}}}
     UI.sorties.push({fos:n,hex,n:k,land});render()});
   document.querySelectorAll('[data-unsortie]').forEach(b=>b.onclick=()=>{UI.sorties=UI.sorties.filter(s=>s.fos!==+b.dataset.unsortie);render()});
