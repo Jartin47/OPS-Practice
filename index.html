@@ -144,7 +144,7 @@ const MOBS={
   Andersen:{n:'Andersen AFB',hex:609,ft:'F-22',cs:['TIDE','HAWK'],note:'Logistics and WRM hub. Big security and port.',lean:{},stock:{fuel:8,food:8,water:8,bomb:10,missile:10}},
   Yokota:{n:'Yokota AB',hex:208,ft:'F-16',cs:['SAMURAI','ATLAS'],note:'Mobility hub. Only 1 ICT (fighter maintenance) kit, so request more from TRANSCOM early.',lean:{11:1},stock:{fuel:8,food:10,water:10,bomb:6,missile:6}},
   Osan:{n:'Osan AB',hex:207,ft:'F-22',cs:['MUSTANG','VIPER'],note:'Extra port, comm and security. No exportable missile defense.',lean:{7:0},stock:{fuel:8,food:8,water:8,bomb:8,missile:8}},
-  JBPHH:{n:'JB Pearl Harbor-Hickam',hex:511,far:true,ft:'F-22',cs:[],note:'Team 4 in the video and spreadsheet. Hawaii is outside the theater: every airlift flight and fighter move out of Hawaii spends one full turn transiting to the AOR entry point (hex 511), and flights home spend a turn coming back. Out of PLA missile range. Same strengths as Osan.',lean:{7:0},stock:{fuel:8,food:8,water:8,bomb:8,missile:8}}};
+  JBPHH:{n:'JB Pearl Harbor-Hickam',hex:511,far:true,ft:'F-22',cs:[],note:'Flights and fighter moves take 1 extra turn each way to reach the theater. Out of PLA missile range.',lean:{7:0},stock:{fuel:8,food:8,water:8,bomb:8,missile:8}}};
 const TEAMS=['Kadena','Andersen','Yokota','Osan']; // the four AI wings in the theater roles
 const OP_AREAS={Kadena:{crisis:[602,703,704,705,804],conflict:[704,804,407,507,607]},Andersen:{crisis:[506,507,605,606,607],conflict:[405,406,505,506,605]},
   Yokota:{crisis:[308,407,508,607,708],conflict:[106,107,206,306,307]},Osan:{crisis:[108,207,307,308,407],conflict:[306,405,406,505,506]}};OP_AREAS.JBPHH=OP_AREAS.Osan;
