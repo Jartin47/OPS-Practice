@@ -5,7 +5,7 @@
   var GOATCOUNTER_CODE = 'jartin47';   // your GoatCounter site code, e.g. 'opspractice' for https://opspractice.goatcounter.com
   var FORMSPREE_ID = 'moedrrql';       // your Formspree form ID, e.g. 'xyzabcd' from https://formspree.io/f/xyzabcd
 
-  var VERSION = 'v1.8 · 2026-11-26'; // bump with every update so you can tell when GitHub Pages has refreshed
+  var VERSION = 'v1.9 · 2026-11-26'; // bump with every update so you can tell when GitHub Pages has refreshed
   var page = /drills/.test(location.pathname) ? 'drills' : 'campaign';
 
   /* ---------- version label ---------- */

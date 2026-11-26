@@ -14,6 +14,12 @@ Browser practice tools for OPS (Operation Pacific Shield / Kingfish ACE). Each o
 
 Some board details are estimates, including the FOS hex positions and where the space-board orbits sit over the OPS map. Your instructors' rulings win.
 
+## Rules notes
+
+v1.9 checked the game against the OPS User Guide, Expectations Brief, EXORD and FRAGORD and added the missing rules: sealift and aircraft apportionment every OPS block (2 turns), taxed food and water returning to the MOB, RFI answers staying with an airfield, surveying a 5th airfield, 2-turn Camo and Hardening, a ramp build 1 turn after Base Recovery is in place, a 2-turn grace period when a country revokes access, runway and parking ramp strikes that add up, airdropping a Base Recovery team with a risk token, fighter escorts for airlift through PLA hexes, 2-ship force packages, the once-per-game USSF counter-jam, and choosing the host nation chit. An aircraft bigger than a field's whole MOG can't use it.
+
+Still simplified: one download stop per flight, no alternate airfields, Osan only for Team 4 (not JBPHH), fighters return to their own FOS, no country risk cards or MRA risk tokens, CASEVAC checks only the pilot's hex, satellites can't change orbit, and the computer-run MOBs in the theater roles don't use escorts or 2-ships.
+
 ## Usage counts and feedback
 
 `site.js` adds two optional extras to both pages. Each one stays off until you fill in its setting at the top of `site.js`.
