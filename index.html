@@ -328,6 +328,12 @@ function mogCheck(){ // CAOC station workload: PPRs ≤ 2×MOG, ground at end �
     res[f.num]={ground,ppr,M,ok:ground<=M.u+1e-9&&ppr<=2*M.u+1e-9}});
   return res;
 }
+function fosRoom(a,f){ // MOG left at FOS f for aircraft a, counting every other aircraft's plan this turn
+  const M=mog(f),u=AC[a.type].u;let g=0,p=0;
+  G.aircraft.forEach(b=>{if(b===a)return;const c=planCheck(b);const leaving=b.loc.k==='fos'&&b.loc.n===f.num&&!c.hold&&c.ok;
+    if(b.loc.k==='fos'&&b.loc.n===f.num&&!leaving)g+=AC[b.type].u;
+    if(!c.hold&&c.ok&&String(b.plan.dest)===String(f.num)&&c.intent!=='enroute'){p+=AC[b.type].u;if(c.intent==='land')g+=AC[b.type].u}});
+  const pprOk=p+u<=2*M.u+1e-9;return {M,g,p,land:pprOk&&g+u<=M.u+1e-9,ret:pprOk&&g<=M.u+1e-9}}
 function caocMog(){ // first-come MOG verdicts in ATO order, same as execution
   const tally={},rej={};G.fos.forEach(f=>{let g=0;G.aircraft.forEach(a=>{if(a.loc.k==='fos'&&a.loc.n===f.num){const c=planCheck(a);if(c.hold||!c.ok)g+=AC[a.type].u}});tally[f.num]={g,p:0,M:mog(f)}});
   G.aircraft.forEach(a=>{const c=planCheck(a);if(c.hold||!c.ok||a.plan.dest==='mob'||c.intent==='enroute')return;const T=tally[+a.plan.dest];if(!T)return;
@@ -1213,24 +1219,48 @@ function availableLoads(dest){
   Object.keys(EXTRAS).forEach(x=>{if(f.extras[x])return;if(x==='gear'&&FOS_COLOR[f.num]!=='red')return;if(x==='light'&&FOS_COLOR[f.num]!=='yellow')return;if(x==='assess'&&f.assessed)return;if(x==='gbr'&&G.fos.some(o=>o.extras.gbr))return;out.push({k:'extra',x,fos:f.num,avail:G.kits[x]??0})});
   return out;
 }
+function plannedFor(f){const out={},rej=caocMog();G.aircraft.forEach(a=>{const p=a.plan;if(!p||String(p.dest)!==String(f.num)||a.loc.k!=='mob'||a.broken)return;const c=planCheck(a);if(!c.ok||c.hold||rej[a.id])return;
+  (p.load||[]).forEach(it=>{if(it.k!=='kit')return;const o=out[it.t]||(out[it.t]={team:null,eq:null});o[it.p]=a.cs})});return out}
+function reqStatus(f,t,plan){const T=TASKS[t],k=kitNeed(f,t),g=f.got[t]||{},pl=plan[t]||{};
+  const part=(kind,n,unit)=>{if(n===0)return {ok:true,txt:'not needed',cls:'muted'};if(g[kind]||f.site[t])return {ok:true,txt:'on site',cls:'ok'};
+    if(pl[kind])return {ok:true,txt:`on ${pl[kind]}`,cls:'acc'};const have=(kind==='team'?G.kits[t]:G.equip[t])??0;
+    return {ok:false,txt:`needs ${n} ${unit}${have?'':' · none at MOB'}`,cls:'bad'}};
+  const team=part('team',k.pax,'PAX'),eq=part('eq',k.pp,'PP');const pre=T.pre.filter(x=>!f.done[x]);
+  let st,cls;if(f.done[t]){st='Done';cls='ok'}
+  else if(team.ok&&eq.ok){const coming=(team.cls==='acc'||eq.cls==='acc');st=pre.length?`${coming?'Lands this turn, ':'On site, '}waits on ${pre.join(', ')}`:t===1?(coming?'Lands this turn, then bed down timer':'Bed down timer running'):(coming?'Completes when it lands':'Completes this turn');cls=pre.length?'warn':'ok'}
+  else{st='Missing '+[team.ok?'':'team',eq.ok?'':'equipment'].filter(Boolean).join(' and ');cls='bad'}
+  return {team,eq,pre,st,cls}}
+function fosReqTable(f){const plan=plannedFor(f);const ready=FIGHTER_TASKS.filter(t=>{const r=reqStatus(f,t,plan);return f.done[t]||(r.team.ok&&r.eq.ok)});
+  const tag=(r)=>`<span class="pill ${r.cls==='muted'?'':r.cls}">${esc(r.txt)}</span>`;
+  return `<div class="small">Fighter-ready tasks (★) covered by what's on site or loaded: <b>${ready.length}/${FIGHTER_TASKS.length}</b>${ready.length<FIGHTER_TASKS.length?` · still missing ${FIGHTER_TASKS.filter(t=>!ready.includes(t)).join(', ')}`:''}</div>
+  <div class="tbl"><table class="req"><thead><tr><th>Task</th><th>Team</th><th>Equipment</th><th>Status</th></tr></thead><tbody>${Object.keys(TASKS).map(Number).map(t=>{const r=reqStatus(f,t,plan);
+    return `<tr class="${f.done[t]?'muted':''}"><td>${FIGHTER_TASKS.includes(t)?'★ ':''}<b class="mono">${t}</b> ${esc(TASKS[t].n)}</td><td>${f.done[t]?'':tag(r.team)}</td><td>${f.done[t]?'':tag(r.eq)}</td><td><span style="color:var(--${r.cls==='warn'?'warn':r.cls==='bad'?'bad':'ok'})">${esc(r.st)}</span></td></tr>`}).join('')}</tbody></table></div>`}
+function loadCovers(a){const p=a.plan;if(!p||!p.load||!p.load.length||!p.dest||p.dest==='mob')return '';const f=fosByNum(+p.dest);if(!f)return '';const plan=plannedFor(f);
+  const ts=[...new Set(p.load.filter(it=>it.k==='kit').map(it=>it.t))];if(!ts.length)return '';
+  return `<div class="small"><b>This load covers:</b> ${ts.map(t=>{const r=reqStatus(f,t,plan);const mine=p.load.filter(it=>it.k==='kit'&&it.t===t).map(it=>it.p==='team'?'team':'equipment').join(' + ');
+    return `Task ${t} ${mine} <span style="color:var(--${r.cls==='bad'?'bad':r.cls==='warn'?'warn':'ok'})">(${esc(r.st.toLowerCase())})</span>`}).join(' · ')}</div>`}
 function atoPanel(){
   const mc=mogCheck(),rej=caocMog();
   let h=`<div class="stack"><p class="help">Plan each allocated aircraft. Cargo loads only at the MOB. Ranges: C-130 <b>3</b> hexes, C-17 <b>4</b>. Beyond range (up to 2×) the aircraft ends the turn <b>en route</b> and must land next turn. <b>Download &amp; return</b> needs distance + 1 + distance within range. Pallets need a forklift at the FOS unless the same flight brings Task 10 or Bed Down equipment. A Ramp RFI of 1 means one C-130 at a time. CAOC rejects lines that break MOG.</p>`;
   if(G.fos.length)h+=`<div class="tbl"><table><thead><tr><th>Station workload</th><th>MOG</th><th>On ramp at end</th><th>PPRs</th></tr></thead><tbody>${G.fos.map(f=>{const m=mc[f.num];return `<tr><td>FOS ${f.num}</td><td>${m.M.l}</td><td class="mono" style="color:${m.ground>m.M.u?'var(--bad)':'inherit'}">${fmt(m.ground)} / ${m.M.u}</td><td class="mono" style="color:${m.ppr>2*m.M.u?'var(--bad)':'inherit'}">${fmt(m.ppr)} / ${2*m.M.u}</td></tr>`}).join('')}</tbody></table></div><p class="small muted">Units: C-130 = 1, C-17 = 1.5, C-5 = 3.</p>`;
+  if(G.fos.length){UI.reqOpen=UI.reqOpen||{};h+=`<h3>FOS setup requirements</h3><p class="small muted">Live checklist for each FOS: what's done, what's on site, what your planned loads bring this turn, and what's still missing. It updates as you tick loads below. Loads on a flight that breaks range or MOG don't count.</p>`+G.fos.map(f=>{const planned=G.aircraft.some(a=>a.plan&&String(a.plan.dest)===String(f.num));const open=UI.reqOpen[f.num]??planned;return `<details class="fos" data-req="${f.num}" ${open?'open':''}><summary><b>FOS ${f.num}</b> <span class="small muted">${Object.keys(TASKS).filter(t=>f.done[t]).length}/16 done${planned?' · loads planned':''}</span></summary>${fosReqTable(f)}</details>`}).join('')}
   G.aircraft.forEach(a=>{
     const p=a.plan||{dest:'',intent:'land',load:[]};const c=planCheck(a);if(c.ok&&rej[a.id]){c.ok=false;c.msgs=['CAOC will reject: '+rej[a.id]]}
-    const dests=[...(a.loc.k!=='mob'?[['mob',MOBS[G.mob].n+' (MOB)']]:[]),...G.fos.filter(f=>!(a.loc.k==='fos'&&a.loc.n===f.num)).map(f=>[String(f.num),`FOS ${f.num} · ${hexDist(locHex(a),fosHex(f))} hex`])];
+    const room={};G.fos.forEach(f=>room[f.num]=fosRoom(a,f));const hidden=G.fos.filter(f=>!(a.loc.k==='fos'&&a.loc.n===f.num)&&!room[f.num].ret&&String(p.dest)!==String(f.num)).map(f=>f.num);
+    const dests=[...(a.loc.k!=='mob'?[['mob',MOBS[G.mob].n+' (MOB)']]:[]),...G.fos.filter(f=>!(a.loc.k==='fos'&&a.loc.n===f.num)&&!hidden.includes(f.num)).map(f=>{const r=room[f.num];return [String(f.num),`FOS ${f.num} · ${hexDist(locHex(a),fosHex(f))} hex · ${r.ret?(r.land?'':'round trip only · '):'over MOG · '}ramp ${fmt(r.g)}/${r.M.u}`]})];
     const tot=loadTotal(p.load||[]);const cfg=fitCfg(a.type,tot);const maxPP=Math.max(...AC[a.type].cfg.map(c=>c.pp)),maxPax=Math.max(...AC[a.type].cfg.map(c=>c.pax));
     h+=`<div class="ac ${c.ok?'':'bad'}"><div class="row" style="justify-content:space-between"><b class="mono">${esc(a.cs)} · ${a.type}</b><span class="small muted">${esc(locName(a))}${a.loc.k==='air'?' · <b style="color:var(--bad)">must land</b>':''}${a.broken?' · <b style="color:var(--bad)">broken this turn</b>':''}</span></div>`;
     if(a.broken){h+='</div>';return}
     h+=`<div class="row"><select data-dest="${a.id}" aria-label="Destination for ${esc(a.cs)}"><option value="">Hold this turn</option>${dests.map(([v,l])=>`<option value="${v}" ${String(p.dest)===v?'selected':''}>${esc(l)}</option>`).join('')}</select>
-      ${p.dest&&p.dest!=='mob'&&a.loc.k!=='air'?`<select data-intent="${a.id}" aria-label="Intent"><option value="land" ${p.intent!=='return'?'selected':''}>Land and stay</option><option value="return" ${p.intent==='return'?'selected':''}>Download and return</option></select>`:''}
+      ${p.dest&&p.dest!=='mob'&&a.loc.k!=='air'?`<select data-intent="${a.id}" aria-label="Intent">${!room[+p.dest]||room[+p.dest].land||p.intent!=='return'?`<option value="land" ${p.intent!=='return'?'selected':''}>Land and stay${room[+p.dest]&&!room[+p.dest].land?' (over MOG)':''}</option>`:''}<option value="return" ${p.intent==='return'?'selected':''}>Download and return</option></select>`:''}
+      ${hidden.length?`<span class="small muted">Hidden, MOG full: FOS ${hidden.join(', ')}</span>`:''}
       ${c.hold?'':c.ok?`<span class="pill ok">${c.intent==='enroute'?'En route: lands next turn':c.intent==='return'?'Round trip OK':'OK'}</span>`:''}</div>`;
     if(!c.ok)h+=`<div class="small" style="color:var(--bad)">${c.msgs.map(esc).join('<br>')}</div>`;
     if(a.loc.k==='mob'&&p.dest&&p.dest!=='mob'){
       const opts=availableLoads(p.dest);const f=fosByNum(+p.dest);
       h+=`<div class="small"><b>Load for FOS ${p.dest}</b> <span class="muted">· ${cfg?cfg.n+' config':'no config fits'} · ${tot.pp} PP · ${tot.pax} PAX</span></div>
       <div class="row small"><span>PP</span><div class="meter"><i class="${tot.pp>maxPP?'over':''}" style="width:${Math.min(100,tot.pp/maxPP*100)}%"></i></div><span>PAX</span><div class="meter"><i class="${tot.pax>maxPax?'over':''}" style="width:${Math.min(100,tot.pax/maxPax*100)}%"></i></div></div>
+      ${loadCovers(a)}
       <div class="loadlist">${opts.map(o=>{const same=(it,o)=>it.k===o.k&&it.t===o.t&&it.x===o.x&&it.p===o.p;const on=(p.load||[]).some(it=>same(it,o));const s=itemSize(o);const elsewhere=G.aircraft.some(b=>b!==a&&(b.plan?.load||[]).some(it=>same(it,o)&&it.fos===o.fos));
         const left=o.avail-G.aircraft.filter(b=>b!==a).reduce((n,b)=>n+(b.plan?.load||[]).filter(it=>same(it,o)).length,0);
         return `<label><input type="checkbox" data-load="${a.id}|${o.k}|${o.t??o.x}|${o.p||''}" ${on?'checked':''} ${(!on&&(left<=0||elsewhere))?'disabled':''}><span>${o.k==='kit'?`Task ${o.t} ${esc(TASKS[o.t].n)} ${o.p==='team'?'team':'equipment'}`:esc(EXTRAS[o.x].n)}<br><span class="muted">${s.pax} PAX · ${s.pp} PP · ${elsewhere?'on another aircraft':left+' at MOB'}</span></span></label>`}).join('')||'<span class="muted small">No kits left to send to this FOS.</span>'}</div>
@@ -1422,7 +1452,8 @@ function bind(){
   document.querySelectorAll('[data-ask]').forEach(b=>b.onclick=()=>{const n=+b.dataset.ask;const f=fosByNum(n);const set=UI.rfiPick[n]||[];
     set.forEach(k=>{f.rfi[k]=d(3)});f.asked+=set.length;log('acc',`FOS ${n} RFIs: ${set.map(k=>`${k} ${f.rfi[k]}`).join(', ')}.`);UI.rfiPick[n]=[];applyRfiSide(f);completeAssess(f);save();render()});
   document.querySelectorAll('[data-contract]').forEach(b=>b.onclick=()=>{const [n,t]=b.dataset.contract.split('|').map(Number);fosByNum(n).contractQ=t;save();render()});
-  document.querySelectorAll('[data-dest]').forEach(s=>s.onchange=()=>{const a=G.aircraft.find(x=>x.id==s.dataset.dest);a.plan=s.value?{dest:s.value,intent:'land',load:[]}:null;save();render()});
+  document.querySelectorAll('details[data-req]').forEach(d=>d.ontoggle=()=>{UI.reqOpen=UI.reqOpen||{};UI.reqOpen[d.dataset.req]=d.open});
+  document.querySelectorAll('[data-dest]').forEach(s=>s.onchange=()=>{const a=G.aircraft.find(x=>x.id==s.dataset.dest);a.plan=s.value?{dest:s.value,intent:'land',load:[]}:null;if(a.plan&&s.value!=='mob'){const f=fosByNum(+s.value);if(f){const r=fosRoom(a,f);if(!r.land&&r.ret)a.plan.intent='return'}}save();render()});
   document.querySelectorAll('[data-intent]').forEach(s=>s.onchange=()=>{const a=G.aircraft.find(x=>x.id==s.dataset.intent);a.plan.intent=s.value;save();render()});
   document.querySelectorAll('[data-load]').forEach(cb=>cb.onchange=()=>{const [id,k,t,pt]=cb.dataset.load.split('|');const a=G.aircraft.find(x=>x.id==id);const it=k==='kit'?{k,t:+t,p:pt,fos:+a.plan.dest}:{k,x:t,fos:+a.plan.dest};
     if(cb.checked)a.plan.load.push(it);else a.plan.load=a.plan.load.filter(x=>!(x.k===it.k&&x.t===it.t&&x.x===it.x&&x.p===it.p));save();render()});
