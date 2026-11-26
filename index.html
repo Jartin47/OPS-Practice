@@ -270,6 +270,7 @@ function processTasks(f,report){
   while(changed){changed=false;
     for(const t of Object.keys(TASKS).map(Number)){
       if(f.done[t]||!f.site[t])continue;
+      if(hostCut(f,t).full){f.done[t]=true;changed=true;report&&log('ok',`FOS ${f.num}: the host nation provides Task ${t} ${TASKS[t].n} in full, so it's complete.`);continue}
       if(!TASKS[t].pre.every(p=>f.done[p]))continue;
       if(t===1){const need=f.pax<=10?4:f.pax<=20?2:1; // OTS beddown timing
         f.timer[1]=(f.timer[1]||0)+1; if(f.timer[1]<need)continue}
@@ -411,7 +412,8 @@ function download(a,f){
 }
 function revealRFIs(f){RFI_CATS.forEach(c=>{if(f.rfi[c]==null)f.rfi[c]=d(3)});completeAssess(f);log('ok',`Assessment team at FOS ${f.num} answers the remaining RFIs.`);applyRfiSide(f)}
 function completeAssess(f){if(!f.assessed&&RFI_CATS.every(c=>f.rfi[c]!=null)){f.assessed=true;G.mp+=5;G.assessed++;log('ok',`FOS ${f.num} fully assessed: +5 MP.`)}}
-function applyRfiSide(f){if(f.rfi.Medical===2&&!f.medDP){f.medDP=true;addDP(5,`FOS ${f.num}: host medical care below US standards`)}autoSite(f)}
+function applyRfiSide(f){if(f.rfi.Medical===2&&!f.medDP){f.medDP=true;addDP(5,`FOS ${f.num}: host medical care below US standards`)}autoSite(f);
+  Object.keys(TASKS).map(Number).forEach(t=>{if(!f.done[t]&&hostCut(f,t).full){f.done[t]=true;log('ok',`FOS ${f.num}: the host nation provides Task ${t} ${TASKS[t].n} in full, so it's complete without its prerequisites.`)}})}
 function addDP(n,why){G.dp+=n;log('bad',`+${n} DP: ${why}.`)}
 const mpNet=()=>G.mp-Math.floor(G.dp/5);
 function endOfDay(){
