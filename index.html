@@ -128,10 +128,10 @@ const STOCK={fuel:{n:'Fuel',pp:2},bomb:{n:'Bombs',pp:2},missile:{n:'Missiles',pp
 const RFI_CATS=['CFR','Mobility','Ramp','ATC','Equipment','Bed Down','Fuel','Security','Community','Medical'];
 const RFI_HELP={CFR:'3: fire truck, pickup and CFR crew provided (Task 9 kit shrinks)',Mobility:'2: forklift on site · 3: full Mobility Support (Task 10)',Ramp:'Sets MOG: 1 → 1 C-130 + 2 fighters · 2 → 2 C-17 + 7 · 3 → 6 C-17 + 42',
   ATC:'2: ATC team provided · 3: AF Ops, ATC and weather provided (Task 9 kit shrinks)',Equipment:'2: Humvees for security · 3: all vehicles for Tasks 5, 6, 13',
-  'Bed Down':'2: tent provided · 3: full bed down facilities (Task 1)',Fuel:'2: fuel truck · 3: fuel truck and initial fuel (Task 12 equipment)',
-  Security:'2: perimeter guards (Task 6 people) · 3: ramp and perimeter guards (Tasks 5 and 6 people)',Community:'1: +10 people needed for perimeter · 2: +5 for ramp security · 3: no extra',
+  'Bed Down':'2: tent provided · 3: lodging and base facilities, so Tasks 1 Bed Down and 2 Power are complete',Fuel:'2: fuel truck and some fuel (Task 12 equipment, +2 fuel) · 3: fuel truck and initial fuel (Task 12 equipment, +4 fuel)',
+  Security:'2: perimeter guards (Task 6 people) · 3: host nation security, so Tasks 5 Ramp and 6 Perimeter Security are complete',Community:'1: +10 people needed for perimeter · 2: +5 for ramp security · 3: no extra',
   Medical:'2: below-standard care, Task 14 provided but +5 DP · 3: Task 14 provided'};
-const RFI_TASKS={CFR:[9],Mobility:[10,1],Ramp:[15],ATC:[9],Equipment:[5,6,13],'Bed Down':[1],Fuel:[12],Security:[5,6],Community:[5,6],Medical:[14]};
+const RFI_TASKS={CFR:[9],Mobility:[10,1],Ramp:[15],ATC:[9],Equipment:[5,6,13],'Bed Down':[1,2],Fuel:[12],Security:[5,6],Community:[5,6],Medical:[14]};
 const FOS_HEX={1:208,2:208,3:208,4:308,5:308,6:506,7:606,8:606,9:606,10:706,11:808,12:806,13:706,14:705,15:805,16:906,17:906,18:905,19:905,20:905,21:804,22:804,23:704,24:704,25:704,
   26:603,27:604,28:604,29:604,30:603,31:604,32:504,33:504,34:504,35:504,36:504,37:504,38:402,39:502,40:502,41:501,42:501,43:601,44:600,45:600};
 const FOS_COLOR={};[1,2,3,4,5,6,8,11,15,16,17,20,21,22,23,27,30,31,37,39,42,43,45].forEach(n=>FOS_COLOR[n]='green');
@@ -143,9 +143,11 @@ const MOBS={
   Kadena:{n:'Kadena AB',hex:407,ft:'F-16',cs:['ARROW','MOOSE'],note:'Big munitions stocks. Light port, security and CFR.',lean:{10:2,5:2,6:2,9:2},stock:{fuel:8,food:8,water:8,bomb:8,missile:8}},
   Andersen:{n:'Andersen AFB',hex:609,ft:'F-22',cs:['TIDE','HAWK'],note:'Logistics and WRM hub. Big security and port.',lean:{},stock:{fuel:8,food:8,water:8,bomb:10,missile:10}},
   Yokota:{n:'Yokota AB',hex:208,ft:'F-16',cs:['SAMURAI','ATLAS'],note:'Mobility hub. Only 1 ICT (fighter maintenance) kit, so request more from TRANSCOM early.',lean:{11:1},stock:{fuel:8,food:10,water:10,bomb:6,missile:6}},
-  Osan:{n:'Osan AB',hex:207,ft:'F-22',cs:['MUSTANG','VIPER'],note:'Extra port, comm and security. No exportable missile defense.',lean:{7:0},stock:{fuel:8,food:8,water:8,bomb:8,missile:8}}};
+  Osan:{n:'Osan AB',hex:207,ft:'F-22',cs:['MUSTANG','VIPER'],note:'Extra port, comm and security. No exportable missile defense.',lean:{7:0},stock:{fuel:8,food:8,water:8,bomb:8,missile:8}},
+  JBPHH:{n:'JB Pearl Harbor-Hickam',hex:511,far:true,ft:'F-22',cs:[],note:'Team 4 in the video and spreadsheet. Hawaii is outside the theater: every airlift flight and fighter move out of Hawaii spends one full turn transiting to the AOR entry point (hex 511), and flights home spend a turn coming back. Out of PLA missile range. Same strengths as Osan.',lean:{7:0},stock:{fuel:8,food:8,water:8,bomb:8,missile:8}}};
+const TEAMS=['Kadena','Andersen','Yokota','Osan']; // the four AI wings in the theater roles
 const OP_AREAS={Kadena:{crisis:[602,703,704,705,804],conflict:[704,804,407,507,607]},Andersen:{crisis:[506,507,605,606,607],conflict:[405,406,505,506,605]},
-  Yokota:{crisis:[308,407,508,607,708],conflict:[106,107,206,306,307]},Osan:{crisis:[108,207,307,308,407],conflict:[306,405,406,505,506]}};
+  Yokota:{crisis:[308,407,508,607,708],conflict:[106,107,206,306,307]},Osan:{crisis:[108,207,307,308,407],conflict:[306,405,406,505,506]}};OP_AREAS.JBPHH=OP_AREAS.Osan;
 const LENGTHS={short:{turns:8,target:50,label:'Short',desc:'2 days, 8 turns. Crisis phase only: build up and fly EXORD sorties.'},standard:{turns:12,target:110,label:'Standard',desc:'3 days, 12 turns. 2 days crisis, 1 day conflict.'},long:{turns:16,target:150,label:'Long',desc:'4 days, 16 turns. 2 days crisis, 2 days conflict.'}};
 
 /* =================== HEX MATH (even-r offset, ids are row*100+col) =================== */
@@ -224,11 +226,15 @@ function accessChange(c,ok,from){G.lostAcc=G.lostAcc||{};if(ok)delete G.lostAcc[
 // guide 2.4.2.1.1: the host nation gives 2 turns to redeploy before it denies landing rights, then people and equipment are trapped
 const canLand=c=>!!G.access[c]||!!(G.lostAcc&&G.lostAcc[c]!=null&&G.turn<G.lostAcc[c]+2);
 const isDown=f=>!!(G.standDown&&G.standDown.t===G.turn&&G.standDown.n===f.num);
+const CS={'C-17':'MOOSE','C-130':'ARROW','C-5':'BOSCO'}; // call signs from the OPS video and spreadsheet
+const rollWant=()=>({'C-17':1+d(3)+(G.exord==='surge'?1:0),'C-130':1+d(3),'C-5':d(6)===6?2:1});
+// TRANSCOM forecasts the next block: accurate to ±3 C-17 and C-130, ±1 C-5
+function forecastTxt(w){const n=(v,k)=>Math.max(0,v+Math.round((Math.random()*2-1)*k));return `about ${n(w['C-17'],3)} C-17 (±3), ${n(w['C-130'],3)} C-130 (±3) and ${n(w['C-5'],1)} C-5 (±1)`}
 function allocAircraft(first){
-  const M=MOBS[G.mob];const want={'C-17':1+d(3)+(G.exord==='surge'?1:0),'C-130':1+d(3),'C-5':1};
+  const want=G.nextWant||rollWant();G.nextWant=rollWant();G.forecast=forecastTxt(G.nextWant);
   ['C-5','C-17','C-130'].forEach(t=>{
     let have=G.aircraft.filter(a=>a.type===t);
-    while(have.length<want[t]){G.aircraft.push({id:G.seq++,type:t,cs:`${t==='C-5'?'HEAVY':t==='C-17'?M.cs[1]:M.cs[0]} ${String(G.seq).padStart(2,'0')}`,loc:{k:'mob'},cargo:[],airborne:0,plan:null});have=G.aircraft.filter(a=>a.type===t)}
+    while(have.length<want[t]){G.aircraft.push({id:G.seq++,type:t,cs:`${CS[t]} ${String(G.seq).padStart(2,'0')}`,loc:{k:'mob'},cargo:[],airborne:0,plan:null});have=G.aircraft.filter(a=>a.type===t)}
     if(!first){const idle=have.filter(a=>a.loc.k==='mob'&&!a.cargo.length);while(have.length>want[t]&&idle.length){const a=idle.pop();G.aircraft=G.aircraft.filter(x=>x!==a);have=G.aircraft.filter(x=>x.type===t)}}
   });
 }
@@ -245,13 +251,13 @@ function hostCut(f,t){ // what host nation support removes from a task kit, from
   if(t===9){if(r.CFR===3){cut.pax+=5;cut.pp+=8}else if(r.CFR===2)cut.pp+=6;if(r.ATC===3)cut.pax+=8;else if(r.ATC===2)cut.pax+=5}
   if(t===10&&r.Mobility===3)cut.full=true;
   if(t===10&&r.Mobility===2)cut.pp+=3;
-  if(t===1&&r['Bed Down']===3)cut.full=true;
+  if((t===1||t===2)&&r['Bed Down']===3)cut.full=true; // video walkthrough: Bed Down 3 provides Tasks 1 and 2
   if(t===1&&r['Bed Down']===2)cut.pp+=2;
   if(t===12){if(r.Fuel===3)cut.pp+=6;else if(r.Fuel===2)cut.pp+=6}
   if((t===5||t===6||t===13)&&r.Equipment===3)cut.pp+=2;
   if((t===5||t===6)&&r.Equipment===2)cut.pp+=2;
   if(t===6&&(r.Security===2||r.Security===3))cut.pax+=10;
-  if(t===5&&r.Security===3)cut.pax+=5;
+  if((t===5||t===6)&&r.Security===3)cut.full=true; // video walkthrough: Security 3 completes Tasks 5 and 6
   if(t===14&&(r.Medical===2||r.Medical===3))cut.full=true;
   return cut;
 }
@@ -301,16 +307,17 @@ function fitCfg(type,tot){return AC[type].cfg.find(c=>tot.pp<=c.pp&&tot.pax<=c.p
 function locHex(a){return a.loc.k==='mob'?MOBS[G.mob].hex:a.loc.k==='fos'?FOS_HEX[a.loc.n]:a.loc.hex}
 function locName(a){return a.loc.k==='mob'?MOBS[G.mob].n:a.loc.k==='fos'?`FOS ${a.loc.n}`:`airborne over hex ${a.loc.hex}`}
 function destHex(dst){return dst==='mob'?MOBS[G.mob].hex:FOS_HEX[+dst]}
+const farMob=()=>!!(MOBS[G.mob]&&MOBS[G.mob].far);
 const C5_ROLL='d20 risk roll: 1-3 crash (aircraft and cargo lost), 4-6 broken 2 turns, 7-10 broken 1 turn, 11-20 no damage';
-function riskNeed(a){if(!a.plan||a.plan.dest==null||a.plan.dest===''||a.broken)return 0;if(a.plan.intent==='airdrop')return 1;if(a.type!=='C-5')return 0;let n=0;const p=a.plan;
+function riskNeed(a){if(!a.plan||a.plan.dest==null||a.plan.dest===''||a.broken)return 0;if(a.plan.intent==='airdrop')return 1;if(a.type!=='C-5')return 0;let n=0;const p=a.plan;if(farMob()&&a.loc.k==='mob'&&p.dest!=='mob')return 0;if(p.via)n+=2; // a C-5 lands and takes off at the en route FOS
   if(a.loc.k==='fos')n++; // takeoff from a FOS
-  if(p.dest!=='mob'){const R=AC[a.type].range,dist=hexDist(locHex(a),destHex(p.dest));if(!(p.intent!=='return'&&dist>R&&a.loc.k!=='air'))n+=p.intent==='return'?2:1}
+  if(p.dest!=='mob'){const R=AC[a.type].range,dist=hexDist(locHex(a),destHex(p.dest));if(!(p.intent!=='return'&&dist>R&&(a.loc.k!=='air'||a.loc.transit)))n+=p.intent==='return'?2:1}
   return n}
 function pathHexes(from,to){const n=hexDist(from,to),out=[];for(let i=1;i<=n;i++)out.push(hexLerp(from,to,i/n));return out}
 const threatAt=h=>(G.pla[h]||[]).some(t=>t.id>=1&&t.s!=='sj');
 function escortOk(h){return (UI.sorties||[]).some(s=>{if(!s.escort||s.hex!==h)return false;const f=fosByNum(s.fos);return f&&!fighterReady(f).length&&f.fighters>0&&f.stock.fuel>0&&f.stock.bomb>0&&f.stock.missile>0&&hexDist(fosHex(f),h)<=4})}
 // guide 7.2.1: in conflict, airlift can't overfly a hex with known PLA forces unless a fighter escorts it into that hex this turn
-function escortNeed(a){if(phase()!=='conflict'||!a.plan||a.plan.dest==null||a.plan.dest==='')return [];return [...new Set(pathHexes(locHex(a),destHex(a.plan.dest)))].filter(threatAt)}
+function escortNeed(a){if(phase()!=='conflict'||!a.plan||a.plan.dest==null||a.plan.dest==='')return [];const pts=a.plan.via?[locHex(a),FOS_HEX[+a.plan.via],destHex(a.plan.dest)]:[locHex(a),destHex(a.plan.dest)];const hs=[];for(let i=1;i<pts.length;i++)hs.push(...pathHexes(pts[i-1],pts[i]));return [...new Set(hs)].filter(threatAt)}
 function riskLeft(a){let used=0;for(const b of G.aircraft){if(b===a)break;used+=riskNeed(b)}return (G.riskTok||0)-used}
 function planCheck(a){ // returns {ok, msgs, intent:'land'|'return'|'enroute', ...}
   const p=a.plan;if(a.broken||!p||p.dest==null||p.dest==='')return {ok:true,hold:true,msgs:[]};
@@ -323,14 +330,39 @@ function planCheck(a){ // returns {ok, msgs, intent:'land'|'return'|'enroute', .
   if(intent==='return'&&dist*2+1>R)msgs.push(`Download and return needs ${dist} + 1 + ${dist} = ${dist*2+1} hexes. A ${a.type} flies ${R}.`);
   if(intent==='airdrop'){if(a.type==='C-5')msgs.push('C-5s can\'t airdrop.');if(a.loc.k!=='mob')msgs.push('An airdrop flies from the MOB with the repair team on board.');if(dist*2>R)msgs.push(`An airdrop and return needs ${dist} + ${dist} = ${dist*2} hexes. A ${a.type} flies ${R}.`);
     if(items.some(it=>!(it.k==='kit'&&it.t===15)))msgs.push('Only the Base Recovery (Task 15) runway repair team and equipment can be airdropped.');if(riskNeed(a)>riskLeft(a))msgs.push(`An airdrop needs a risk token. You have ${Math.max(0,riskLeft(a))} left this block.`)}
+  {const L=mobRw();if(L&&(a.loc.k==='mob'||p.dest==='mob')){const M=MOBS[G.mob].n;
+    if(L>=3)msgs.push(`The ${M} runway is non-operational this turn after a PLA strike. Nothing lands or takes off there.`);
+    else if(L>=2&&a.type!=='C-130')msgs.push(`The ${M} runway is C-130 only this turn after a PLA strike.`);
+    else if(a.type==='C-5')msgs.push(`The ${M} runway is C-17/C-130 only this turn after a PLA strike.`)}}
   if(a.loc.k==='fos'){const o=fosByNum(a.loc.n);if(o){
     if(o.runway>=3)msgs.push(`FOS ${o.num} runway is non-operational. Nothing takes off until Base Recovery repairs it.`);
     else if(o.runway>=2&&a.type!=='C-130')msgs.push(`FOS ${o.num} is C-130 only after damage. This ${a.type} is stuck there until the runway is repaired.`);
     if(!canLand(fosCountry(o.num)))msgs.push(`${fosCountry(o.num)} withdrew landing rights. This aircraft is trapped at FOS ${o.num} until access returns.`);
     if(isDown(o))msgs.push(`FOS ${o.num} is inoperable this turn while you survey another airfield.`)}}
+  if(farMob()&&a.loc.k==='mob'&&p.dest!=='mob'){ // video: aircraft departing Pearl Harbor take one turn to transit to the AOR entry point
+    if(intent!=='land'||p.via)msgs.push('Flights out of Hawaii spend this turn transiting to the AOR entry point. Next turn they fly on and land, so no airdrop, round trip or en route stop on this leg.');
+    if(!fosByNum(+p.dest))msgs.push('Not one of your FOS.');
+    items.forEach(it=>{if(it.fos!==+p.dest)msgs.push(`${itemLabel(it)} is loaded on a flight to the wrong place.`)});
+    return {ok:!msgs.length,msgs,intent:'transit',dist,cfg,tot}}
+  const via=p.via!=null&&p.via!==''?fosByNum(+p.via):null;
+  if(p.via!=null&&p.via!==''){ // video: two stops in one turn, and a download at the en route stop costs 1 hex of range
+    if(!via)msgs.push('The en route stop is not one of your FOS.');
+    else{const vn=via.num;
+      if(a.loc.k!=='mob')msgs.push('Two-stop flights start at the MOB with both loads on board.');
+      if(intent!=='land'||p.dest==='mob')msgs.push('A two-stop flight downloads at the en route stop, then lands to stay at its destination FOS.');
+      if(String(vn)===String(p.dest))msgs.push('The en route stop and the destination are the same FOS.');
+      const d1=hexDist(from,fosHex(via)),d2=hexDist(fosHex(via),to);if(d1+1+d2>R)msgs.push(`Two stops need ${d1} + 1 + ${d2} = ${d1+1+d2} hexes (the download at the en route stop costs 1 hex). A ${a.type} flies ${R}.`);
+      if(!canLand(fosCountry(vn)))msgs.push(`${fosCountry(vn)} has denied access. No landing rights at FOS ${vn}.`);
+      if(isDown(via))msgs.push(`FOS ${vn} is inoperable this turn while you survey another airfield.`);
+      {const st=G.space&&G.space.storm;if(st&&st.t===G.turn&&st.z===zoneOfFos(vn)&&!covers(st.z,'WX'))msgs.push(`Typhoon over GEO zone ${st.z} and no weather satellite coverage. The stop at FOS ${vn} is cancelled this turn.`)}
+      if(via.runway>=3)msgs.push(`FOS ${vn} runway is non-operational, so it can't be an en route stop.`);
+      else if(via.runway>=2&&a.type!=='C-130')msgs.push(`FOS ${vn} is C-130 only after damage.`);
+      if(FOS_COLOR[vn]==='red'&&a.type==='C-5')msgs.push(`FOS ${vn} is a red field: C-17 and C-130 only.`);
+      if(AC[a.type].u>mog(via).u+1e-9)msgs.push(`FOS ${vn} MOG is ${mog(via).l}. Its ramp has no room for a ${a.type}.`);
+      const vit=items.filter(it=>it.fos===vn);if(vit.some(it=>itemSize(it).pp>0)&&!hasForklift(via)&&!vit.some(it=>it.k==='kit'&&it.p==='eq'&&(it.t===10||it.t===1)))msgs.push(`No forklift at FOS ${vn}. Pallets can't download at the en route stop.`)}}
   escortNeed(a).filter(h=>!escortOk(h)).forEach(h=>msgs.push(`The route crosses hex ${hexLabel(h)}, which holds known PLA forces. Plan a fighter escort into that hex on the Fighters tab first.`));
-  if(intent!=='return'&&intent!=='airdrop'&&dist>R){
-    if(a.loc.k==='air')msgs.push(`Airborne since last turn and ${dist} hexes out. It must land this turn within ${R} hexes or run out of fuel.`);
+  if(intent!=='return'&&intent!=='airdrop'&&!via&&dist>R){
+    if(a.loc.k==='air'&&!a.loc.transit)msgs.push(`Airborne since last turn and ${dist} hexes out. It must land this turn within ${R} hexes or run out of fuel.`);
     else if(dist>R*2)msgs.push(`${dist} hexes is more than two turns of ${a.type} range (${R}).`);
     else intent='enroute';
   }
@@ -347,10 +379,10 @@ function planCheck(a){ // returns {ok, msgs, intent:'land'|'return'|'enroute', .
       if(FOS_COLOR[f.num]==='red'&&a.type==='C-5')msgs.push('Red fields take C-17 and C-130 only.');
       if(intent!=='airdrop'&&AC[a.type].u>mog(f).u+1e-9)msgs.push(`FOS ${f.num} MOG is ${mog(f).l}. Its ramp has no room for a ${a.type} at all, even for a quick download.`);
       if(a.type==='C-5'&&riskNeed(a)>riskLeft(a))msgs.push(`A C-5 at a FOS needs a risk token for every landing and takeoff. This flight needs ${riskNeed(a)} and you have ${Math.max(0,riskLeft(a))} left this block.`);
-      if(intent!=='enroute'&&intent!=='airdrop'){const pal=items.some(it=>itemSize(it).pp>0);const brings=items.some(it=>it.k==='kit'&&it.p==='eq'&&(it.t===10||it.t===1));
+      if(intent!=='enroute'&&intent!=='airdrop'){const di=items.filter(it=>it.fos===+p.dest);const pal=di.some(it=>itemSize(it).pp>0);const brings=di.some(it=>it.k==='kit'&&it.p==='eq'&&(it.t===10||it.t===1));
         if(pal&&!hasForklift(f)&&!brings)msgs.push(`No forklift at FOS ${f.num}. Pallets can't download. Send Task 10 (or Bed Down) equipment on the same flight or first, or get a Mobility RFI of 2+.`)}
     }
-    items.forEach(it=>{if(it.fos!==+p.dest)msgs.push(`${itemLabel(it)} is loaded on a flight to the wrong place.`)});
+    items.forEach(it=>{if(it.fos!==+p.dest&&!(via&&it.fos===via.num))msgs.push(`${itemLabel(it)} is loaded on a flight to the wrong place.`)});
   } else if(items.length)msgs.push('Cargo for a FOS is loaded on a flight to the MOB.');
   if(a.loc.k!=='mob'&&items.length)msgs.push('Cargo can only be loaded at the MOB.');
   if(a.type==='C-5'&&a.loc.k==='fos'&&riskNeed(a)>riskLeft(a)&&!msgs.some(m=>/risk token/.test(m)))msgs.push(`A C-5 taking off from a FOS needs a risk token. You have ${Math.max(0,riskLeft(a))} left this block.`);
@@ -361,7 +393,8 @@ function mogCheck(){ // CAOC station workload: PPRs ≤ 2×MOG, ground at end �
     G.aircraft.forEach(a=>{const c=planCheck(a);
       const leaving=a.loc.k==='fos'&&a.loc.n===f.num&&!c.hold&&c.ok;
       if(a.loc.k==='fos'&&a.loc.n===f.num&&!leaving)ground+=AC[a.type].u;
-      if(!c.hold&&c.ok&&String(a.plan.dest)===String(f.num)&&c.intent!=='enroute'&&c.intent!=='airdrop'){ppr+=AC[a.type].u;if(c.intent==='land')ground+=AC[a.type].u}});
+      if(!c.hold&&c.ok&&String(a.plan.dest)===String(f.num)&&c.intent!=='enroute'&&c.intent!=='airdrop'&&c.intent!=='transit'){ppr+=AC[a.type].u;if(c.intent==='land')ground+=AC[a.type].u}
+      if(!c.hold&&c.ok&&a.plan.via&&String(a.plan.via)===String(f.num))ppr+=AC[a.type].u});
     res[f.num]={ground,ppr,M,ok:ground<=M.u+1e-9&&ppr<=2*M.u+1e-9}});
   return res;
 }
@@ -369,14 +402,16 @@ function fosRoom(a,f){ // MOG left at FOS f for aircraft a, counting every other
   const M=mog(f),u=AC[a.type].u;let g=0,p=0;
   G.aircraft.forEach(b=>{if(b===a)return;const c=planCheck(b);const leaving=b.loc.k==='fos'&&b.loc.n===f.num&&!c.hold&&c.ok;
     if(b.loc.k==='fos'&&b.loc.n===f.num&&!leaving)g+=AC[b.type].u;
-    if(!c.hold&&c.ok&&String(b.plan.dest)===String(f.num)&&c.intent!=='enroute'&&c.intent!=='airdrop'){p+=AC[b.type].u;if(c.intent==='land')g+=AC[b.type].u}});
+    if(!c.hold&&c.ok&&String(b.plan.dest)===String(f.num)&&c.intent!=='enroute'&&c.intent!=='airdrop'&&c.intent!=='transit'){p+=AC[b.type].u;if(c.intent==='land')g+=AC[b.type].u}
+    if(!c.hold&&c.ok&&b.plan.via&&String(b.plan.via)===String(f.num))p+=AC[b.type].u});
   const fits=u<=M.u+1e-9;const pprOk=fits&&p+u<=2*M.u+1e-9;return {M,g,p,land:pprOk&&g+u<=M.u+1e-9,ret:pprOk&&g<=M.u+1e-9}}
 function caocMog(){ // first-come MOG verdicts in ATO order, same as execution
   const tally={},rej={};G.fos.forEach(f=>{let g=0;G.aircraft.forEach(a=>{if(a.loc.k==='fos'&&a.loc.n===f.num){const c=planCheck(a);if(c.hold||!c.ok)g+=AC[a.type].u}});tally[f.num]={g,p:0,M:mog(f)}});
-  G.aircraft.forEach(a=>{const c=planCheck(a);if(c.hold||!c.ok||a.plan.dest==='mob'||c.intent==='enroute'||c.intent==='airdrop')return;const T=tally[+a.plan.dest];if(!T)return;
-    const u=AC[a.type].u,ng=T.g+(c.intent==='land'?u:0),np=T.p+u;
+  G.aircraft.forEach(a=>{const c=planCheck(a);if(c.hold||!c.ok||a.plan.dest==='mob'||c.intent==='enroute'||c.intent==='airdrop'||c.intent==='transit')return;const T=tally[+a.plan.dest];if(!T)return;
+    const u=AC[a.type].u,ng=T.g+(c.intent==='land'?u:0),np=T.p+u;const V=a.plan.via?tally[+a.plan.via]:null;
     if(ng>T.M.u+1e-9||np>2*T.M.u+1e-9)rej[a.id]=`FOS ${a.plan.dest} MOG is ${T.M.l}. This flight would make ${fmt(ng)}/${T.M.u} on the ramp and ${fmt(np)}/${2*T.M.u} PPRs (C-130 = 1, C-17 = 1.5).`;
-    else{T.g=ng;T.p=np}});
+    else if(V&&V.p+u>2*V.M.u+1e-9)rej[a.id]=`FOS ${a.plan.via} MOG is ${V.M.l}. The en route stop would make ${fmt(V.p+u)}/${2*V.M.u} PPRs there.`;
+    else{T.g=ng;T.p=np;if(V)V.p+=u}});
   return rej;
 }
 function c5Risk(a,what){G.riskTok=Math.max(0,(G.riskTok||0)-1);const r=d(20);
@@ -401,6 +436,8 @@ function executeTurn(){
       if(r===1){a.dead=true;a.plan=null;a.cargo=[];log('bad',`${a.cs} airdrop over FOS ${f.num} fails (risk roll ${r}). Aircraft, crew and repair team are lost.`);return}
       download(a,f);if(r<=4){a.brokenT=Math.max(a.brokenT||0,1);log('bad',`${a.cs} airdrops the repair team at FOS ${f.num} but is damaged (risk roll ${r}): broken for 1 turn.`)}
       else log('ok',`${a.cs} airdrops the repair team at FOS ${f.num} (risk roll ${r}) and returns to ${locName(a)}.`);a.plan=null;return}
+    if(c.intent==='transit'){a.loc={k:'air',hex:MOBS[G.mob].hex,dest:a.plan.dest,transit:'out'};a.airborne=0;log('acc',`${a.cs} (${a.type}) leaves Hawaii and spends the turn transiting to the AOR entry point (hex ${MOBS[G.mob].hex}). It flies on to FOS ${a.plan.dest} next turn.`);a.plan={dest:a.plan.dest,intent:'land',load:[]};return}
+    if(a.plan.via){const v=fosByNum(+a.plan.via);if(a.type==='C-5'&&!c5Risk(a,`landing at FOS ${v.num}`))return;const had=a.cargo.some(it=>it.fos===v.num);download(a,v);if(a.type==='C-5'&&!c5Risk(a,`takeoff from FOS ${v.num}`))return;log('ok',`${a.cs} stops at FOS ${v.num}${had?' and downloads':''}, then flies on.`)}
     const from=locHex(a),to=destHex(a.plan.dest);
     if(c.intent==='enroute'){const R=AC[a.type].range;const hex=hexLerp(from,to,R/c.dist);a.loc={k:'air',hex,dest:a.plan.dest};a.airborne=1;
       log('acc',`${a.cs} (${a.type}) flies ${R} hexes and is en route over hex ${hex}. It must land next turn.`);a.plan={dest:a.plan.dest,intent:'land',load:[]};return}
@@ -409,17 +446,18 @@ function executeTurn(){
     if(a.plan.dest!=='mob')download(a,fosByNum(+a.plan.dest));
     if(a.type==='C-5'&&a.plan.dest!=='mob'&&c.intent==='return'){if(!c5Risk(a,`takeoff from FOS ${a.plan.dest}`))return}
     if(c.intent==='return'){log('ok',`${a.cs} downloads at ${destName} and returns to ${locName(a)}.`)}
+    else if(a.plan.dest==='mob'&&farMob()&&!(a.loc.k==='air'&&a.loc.transit==='home')){a.loc={k:'air',hex:MOBS[G.mob].hex,dest:'mob',transit:'home'};a.airborne=0;log('acc',`${a.cs} reaches the AOR entry point and spends next turn transiting home to Hawaii.`);a.plan={dest:'mob',intent:'land',load:[]};return}
     else{a.loc=a.plan.dest==='mob'?{k:'mob'}:{k:'fos',n:+a.plan.dest};a.airborne=0;log('ok',`${a.cs} lands at ${destName}${c.dist?` (${c.dist} hex${c.dist>1?'es':''})`:''}.`)}
     a.plan=null;
   });
   // airborne aircraft with no plan run out of fuel
-  G.aircraft.forEach(a=>{if(a.loc.k==='air'){a.airborne++;if(a.airborne>=3){log('bad',`${a.cs} spent a second turn airborne and ran out of fuel. Aircraft and cargo lost.`);a.dead=true}}});
+  G.aircraft.forEach(a=>{if(a.loc.k==='air'&&!a.loc.transit){a.airborne++;if(a.airborne>=3){log('bad',`${a.cs} spent a second turn airborne and ran out of fuel. Aircraft and cargo lost.`);a.dead=true}}});
   G.aircraft=G.aircraft.filter(a=>!a.dead);
   // 2. Fighter moves arrive, new moves depart
-  const arriving=G.moves.filter(m=>!m.done);
-  arriving.forEach(m=>{m.done=true;const f=fosByNum(m.to);if(f){f.fighters+=m.n;log('ok',`${m.n} ${MOBS[G.mob].ft}s arrive at FOS ${m.to}. They can fly sorties next turn.`)}});
+  G.moves.filter(m=>!m.done).forEach(m=>{if(m.wait>0){m.wait--;log('acc',`${m.n} ${MOBS[G.mob].ft}s reach the AOR entry point on their way to FOS ${m.to}.`);return}m.done=true;const f=fosByNum(m.to);if(f){f.fighters+=m.n;log('ok',`${m.n} ${MOBS[G.mob].ft}s arrive at FOS ${m.to}. They can fly sorties next turn.`)}});
   G.moves=G.moves.filter(m=>!m.done);
-  (UI.pendingMoves||[]).forEach(m=>{G.fightersMob-=m.n;G.moves.push({to:m.to,n:m.n});log('acc',`${m.n} ${MOBS[G.mob].ft}s depart ${MOBS[G.mob].n} for FOS ${m.to}.`)});
+  if((UI.pendingMoves||[]).length&&mobRw()>=1){log('bad',`Fighter moves cancelled: the ${MOBS[G.mob].n} runway is damaged this turn.`);UI.pendingMoves=[]}
+  (UI.pendingMoves||[]).forEach(m=>{G.fightersMob-=m.n;G.moves.push({to:m.to,n:m.n,wait:farMob()?1:0});log('acc',`${m.n} ${MOBS[G.mob].ft}s depart ${MOBS[G.mob].n} for FOS ${m.to}.`)});
   UI.pendingMoves=[];
   // 3. Sorties
   (UI.sorties||[]).forEach(s=>flySorties(s));UI.sorties=[];
@@ -441,7 +479,7 @@ function executeTurn(){
   if(G.turn%2===1&&!isTheater())G.riskTok=phase()==='crisis'?2:4;
   if(G.turn===2*turnsPerDay+1){log('bad','FRAGORD received: POTUS authorizes lethal force. The conflict phase begins. Op areas change, fighters may engage identified PLA targets, PRC satellites turn hostile, and your airfields can be struck.');applyFragord()}
   // TRANSCOM arrivals
-  G.transcom.filter(t=>t.arrive===G.turn).forEach(t=>{t.items.forEach(it=>{if(it.k==='kit'){G.kits[it.t]=(G.kits[it.t]||0)+it.n;G.equip[it.t]=(G.equip[it.t]||0)+it.n}else if(it.k==='extra')G.kits[it.x]=(G.kits[it.x]||0)+it.n;else G.stock[it.s]+=it.n});log('ok',`TRANSCOM C-5 lands at ${MOBS[G.mob].n} with ${t.items.map(it=>`${it.n}× ${it.k==='kit'?'Task '+it.t+' kit':it.k==='extra'?EXTRAS[it.x].n:STOCK[it.s].n}`).join(', ')}.`)});
+  G.transcom.filter(t=>t.arrive===G.turn).forEach(t=>{t.items.forEach(it=>{if(it.k==='kit'){G.kits[it.t]=(G.kits[it.t]||0)+it.n;G.equip[it.t]=(G.equip[it.t]||0)+it.n}else if(it.k==='extra')G.kits[it.x]=(G.kits[it.x]||0)+it.n;else G.stock[it.s]+=it.n});G.reach=(G.reach||0)+1;log('ok',`REACH ${String(G.reach).padStart(2,'0')} (TRANSCOM C-5) lands at ${MOBS[G.mob].n} with ${t.items.map(it=>`${it.n}× ${it.k==='kit'?'Task '+it.t+' kit':it.k==='extra'?EXTRAS[it.x].n:STOCK[it.s].n}`).join(', ')}.`)});
   G.space.cyberHex=null;
   randomEvent();
   spaceAdvance();
@@ -462,6 +500,7 @@ function download(a,f){
 function revealRFIs(f){RFI_CATS.forEach(c=>{if(f.rfi[c]==null)f.rfi[c]=d(3)});completeAssess(f);log('ok',`Assessment team at FOS ${f.num} answers the remaining RFIs.`);applyRfiSide(f)}
 function completeAssess(f){if(!f.assessed&&RFI_CATS.every(c=>f.rfi[c]!=null)){f.assessed=true;G.mp+=5;G.assessed++;log('ok',`FOS ${f.num} fully assessed: +5 MP.`)}}
 function applyRfiSide(f){if(f.rfi.Medical===2&&!f.medDP){f.medDP=true;addDP(5,`FOS ${f.num}: host medical care below US standards`)}autoSite(f);
+  G.fuelGift=G.fuelGift||{};if(f.rfi.Fuel>=2&&!G.fuelGift[f.num]){G.fuelGift[f.num]=1;const n=f.rfi.Fuel===3?4:2;f.stock.fuel+=n;log('ok',`FOS ${f.num}: the host nation provides a fuel truck and ${f.rfi.Fuel===3?'initial':'some'} fuel (+${n} fuel on site).`)}
   Object.keys(TASKS).map(Number).forEach(t=>{if(!f.done[t]&&hostCut(f,t).full){f.done[t]=true;log('ok',`FOS ${f.num}: the host nation provides Task ${t} ${TASKS[t].n} in full, so it's complete without its prerequisites.`)}})}
 function addDP(n,why){G.dp+=n;log('bad',`+${n} DP: ${why}.`)}
 const mpNet=()=>G.mp-Math.floor(G.dp/5);
@@ -482,11 +521,15 @@ function endOfBlock(){ // guide 2.2.3.1 and 1.1.4.2: sealift and a new apportion
   if(G.exord==='sealift'&&G.turn<=4)log('bad','Sealift is delayed. Nothing arrives for the next block.');
   else{['fuel','bomb','missile'].forEach(s=>G.stock[s]+=4);log('ok',`Sealift resupplies ${MOBS[G.mob].n} for the new block: +4 fuel, +4 bombs, +4 missiles.`)}
   allocAircraft(false);
-  log('acc',`CFACC apportionment for the next block: ${['C-5','C-17','C-130'].map(t=>`${G.aircraft.filter(a=>a.type===t).length} ${t}`).join(', ')}.`);
+  log('acc',`CFACC apportionment for the next block: ${['C-5','C-17','C-130'].map(t=>`${G.aircraft.filter(a=>a.type===t).length} ${t}`).join(', ')}. TRANSCOM forecast for the block after: ${G.forecast}.`);
 }
+const MOB_RW=['operational','C-17/C-130 only (no C-5)','C-130 only','non-operational (no flights in or out, no fighter moves)'];
+const mobRw=()=>G.mobRw&&G.mobRw.t===G.turn?G.mobRw.lvl:0;
 function strikeFos(f){ // guide 8.3: runway or parking ramp, cumulative without Base Recovery
   f.hit=(f.hit||0)+1;const tough=f.done[15]&&f.done[8];
-  if(d(2)===1){f.runway=f.runway?f.runway+1:d(3);if(f.runway>=4&&f.hit<3)f.runway=3;f.runway=Math.min(4,f.runway);
+  if(d(2)===1){const r=d(100),lvl=r<=10?3:r<=50?2:r<=90?1:0; // OPS spreadsheet FOS runway table (d100)
+    if(!f.runway&&!lvl){f.hit--;log('acc',`PLA ballistic missiles reach the FOS ${f.num} runway, but it holds (d100 ${r}).`);return}
+    f.runway=f.runway?f.runway+1:lvl;if(f.runway>=4&&f.hit<3)f.runway=3;f.runway=Math.min(4,f.runway);
     log('bad',`PLA ballistic missiles hit the FOS ${f.num} runway. Runway: ${['Operational','C-17/C-130 only','C-130 only','Non-operational','Destroyed'][f.runway]}. Fighter operations stop until it's repaired.`)}
   else{f.ramp=(f.ramp??100)<100?Math.max(0,f.ramp-15):pick([40,60,80]);const M=mog(f);log('bad',`PLA ballistic missiles hit the FOS ${f.num} parking ramp. It's at ${f.ramp}% capacity, so MOG is now ${fmt(M.u)} C-130 units and ${M.f} fighters.`);
     let g=G.aircraft.filter(a=>a.loc.k==='fos'&&a.loc.n===f.num);let u=g.reduce((n,a)=>n+AC[a.type].u,0);while(u>M.u+1e-9&&g.length){const a=g.pop();u-=AC[a.type].u;a.dead=true;log('bad',`${a.cs} (${a.type}) no longer fits on the damaged ramp and is destroyed.`)}
@@ -496,13 +539,19 @@ function strikeFos(f){ // guide 8.3: runway or parking ramp, cumulative without 
 }
 function plaStrikes(){
   G.fos.filter(f=>f.pax>0).forEach(f=>{
-    const age=G.turn-(f.firstArrival||G.turn);const thr=(age<4?8:age<8?6:4)-(G.frag==='barrage'&&day()===3?2:0);
+    // OPS spreadsheet: detection d10 beats a FOS threshold of 7 that drops 0.5 per turn on site; attack PLA d20 vs US d10 +5 missile defense +2 camo, ties re-rolled
+    const age=G.turn-(f.firstArrival||G.turn);const thr=Math.max(1,7-0.5*age)-(G.frag==='barrage'&&day()===3?2:0);
     if(d(10)<=thr)return;
-    const mw=covers(zoneOfFos(f.num),'MW');const pla=d(20),def=d(10)+(f.done[7]?2:0)+(f.done[8]?1:0)+(mw?1:0);
+    const mw=covers(zoneOfFos(f.num),'MW');let pla,def;do{pla=d(20);def=d(10)+(f.done[7]?5:0)+(f.done[8]?2:0)+(mw?1:0)}while(pla===def);
     if(pla>def){log('bad',`PLA strike on FOS ${f.num} gets through (PLA ${pla} vs defense ${def}).`);strikeFos(f)}
     else log('ok',`PLA strike on FOS ${f.num} defeated (PLA ${pla} vs defense ${def}${f.done[7]?', missile defense':''}${f.done[8]?', hardening':''}${mw?', missile warning':''}).`);
   });
-  if(d(10)>2){const pla=d(20),def=d(10);if(pla>def){const s=pick(['fuel','bomb','missile','food','water']);const lost=Math.min(2,G.stock[s]);if(!lost)return;G.stock[s]-=lost;log('bad',`PLA strike on ${MOBS[G.mob].n} destroys ${lost} ${STOCK[s].n.toLowerCase()} tokens.`)}}
+  if(farMob())return; // Hawaii is out of range
+  if(d(10)>2){let pla,def;do{pla=d(20);def=d(10)+5}while(pla===def);const M=MOBS[G.mob]; // spreadsheet: MOB detection threshold 2; the MOB has its own missile defense (+5)
+    if(pla<=def){log('ok',`PLA strike on ${M.n} defeated (PLA ${pla} vs defense ${def}, missile defense).`);return}
+    const r=d(100),lvl=r<=10?3:r<=75?2:r<=90?1:0;
+    if(!lvl){log('acc',`PLA missiles reach ${M.n} (PLA ${pla} vs defense ${def}) but the runway holds (d100 ${r}).`);return}
+    G.mobRw={lvl,t:G.turn};log('bad',`PLA missiles hit the ${M.n} runway (PLA ${pla} vs defense ${def}, d100 ${r}). This turn it is ${MOB_RW[lvl]}. Repairs finish by next turn.`)}
 }
 const EVENTS=[
   ()=>{G.stock.fuel+=2;log('acc','Event: a tanker arrives early. +2 fuel at the MOB.')},
@@ -666,7 +715,7 @@ const AI_FOS={Kadena:[6,8],Andersen:[7,10],Yokota:[1,4],Osan:[2,5]};
 const MOB_COLOR={Kadena:'#e0218a',Andersen:'#9b5cff',Yokota:'#19b37a',Osan:'#ff8a1f'};
 const isTheater=()=>G&&G.role&&G.role!=='mob';
 const goal=()=>isTheater()?THEATER_TARGET[G.role][G.len]:LENGTHS[G.len].target;
-function theaterAreas(ph){const out=new Set();Object.keys(MOBS).forEach(m=>OP_AREAS[m][ph||phase()].forEach(h=>out.add(h)));return [...out]}
+function theaterAreas(ph){const out=new Set();TEAMS.forEach(m=>OP_AREAS[m][ph||phase()].forEach(h=>out.add(h)));return [...out]}
 const rampU=r=>r>=3?9:r===2?3:1;
 const rampF=r=>r>=3?12:r===2?7:2;
 const rampL=r=>r>=3?'6 C-17 + 42 ftr':r===2?'2 C-17 + 7 ftr':'1 C-130 + 2 ftr';
@@ -677,7 +726,7 @@ function newTheaterGame(role,len){
   G.exord=pick(Object.keys(EXORDS));
   rollAccess(true);seedPLA();seedSpace();
   if(G.exord==='shadow')for(let i=0;i<4;i++){const S=G.space;let o,p,n=0;do{o=pick(ORBIT_KEYS);p=d(ORBITS[o].len);n++}while(occupied(o,p)&&n<40);S.prc.push({id:S.seq++,kind:pick(['dual','prc','prc','civ']),orbit:o,pos:p,known:false,alive:true,cool:0})}
-  Object.keys(MOBS).forEach(m=>{G.ai[m]={fightersMob:16,lost:0,fos:AI_FOS[m].map(n=>({num:n,hex:FOS_HEX[n],prog:0,ramp:pick([1,1,2,2,3]),fork:d(3)>=2,fuel:0,fighters:0,inbound:0,down:0,rbuild:0}))}});
+  TEAMS.forEach(m=>{G.ai[m]={fightersMob:16,lost:0,fos:AI_FOS[m].map(n=>({num:n,hex:FOS_HEX[n],prog:0,ramp:pick([1,1,2,2,3]),fork:d(3)>=2,fuel:0,fighters:0,inbound:0,down:0,rbuild:0}))}});
   allocPool();
   log('h','Day 1 · Turn 1 · Crisis');
   log('bad',`EXORD condition: ${EXORDS[G.exord].n}. ${EXORDS[G.exord].d}`);
@@ -687,7 +736,8 @@ function newTheaterGame(role,len){
   if(role==='caoc')genLines();
   save();
 }
-function allocPool(){G.pool={c17:6+d(4)+(G.exord==='surge'?2:0),c130:6+d(4)};const ms=Object.keys(MOBS);
+const rollPool=()=>({c17:6+d(4)+(G.exord==='surge'?2:0),c130:6+d(4)});
+function allocPool(){G.pool=G.nextPool||rollPool();G.nextPool=rollPool();{const n=(v,k)=>Math.max(0,v+Math.round((Math.random()*2-1)*k));G.poolForecast=`about ${n(G.nextPool.c17,3)} C-17 and ${n(G.nextPool.c130,3)} C-130 (±3 each)`}const ms=TEAMS;
   ms.forEach((m,i)=>{G.appo[m]={c17:Math.floor(G.pool.c17/4)+(i<G.pool.c17%4?1:0),c130:Math.floor(G.pool.c130/4)+(i<G.pool.c130%4?1:0)}});
   ms.forEach(m=>G.ai[m].lost=0)}
 const fosOpen=f=>G.access[fosCountry(f.num)]!==false&&f.prog>=0;
@@ -696,7 +746,7 @@ const jamBlocks=f=>{const cj=G.space.commJam;return cj&&cj.t===G.turn&&cj.z===zo
 /* ---------- CAOC: airlift lines ---------- */
 function genLines(){
   G.lines=[];let id=1;const plan={};
-  Object.keys(MOBS).forEach(m=>{const A=G.ai[m],M=MOBS[m];const open=A.fos.filter(fosOpen);if(!open.length)return;
+  TEAMS.forEach(m=>{const A=G.ai[m],M=MOBS[m];const open=A.fos.filter(fosOpen);if(!open.length)return;
     const fleet=[...Array(Math.max(0,G.appo[m].c17-(A.lostC17||0))).fill('C-17'),...Array(G.appo[m].c130).fill('C-130')];
     fleet.forEach((type,k)=>{
       let f=open.slice().sort((a,b)=>a.prog-b.prog)[k%open.length];
@@ -713,7 +763,7 @@ function genLines(){
         if(fl==='range'&&intent==='land')intent='return';
         else if(fl==='config'){const c=AC[type].cfg.find(c=>c.n===cfg);if(Math.random()<.5)pp=c.pp+d(4);else if(c.pax)pax=c.pax+d(20);else pp=c.pp+d(3)}
         else if(fl==='mog'&&type==='C-17')intent='land'}
-      G.lines.push({id:id++,mob:m,type,cs:`${type==='C-17'?M.cs[1]:M.cs[0]} ${String(10+id).padStart(2,'0')}`,fos:f.num,dist,intent,cfg,pp,pax,fork,dec:null});
+      G.lines.push({id:id++,mob:m,type,cs:`${CS[type]} ${String(10+id).padStart(2,'0')}`,fos:f.num,dist,intent,cfg,pp,pax,fork,dec:null});
     })});
 }
 function lineCheck(L,tally){
@@ -749,7 +799,7 @@ function resolveLines(){
 /* ---------- CAOC: fighter lines ---------- */
 function genFLines(){
   G.flines=[];let id=1;const areas0=m=>OP_AREAS[m][phase()];
-  Object.keys(MOBS).forEach(m=>{G.ai[m].fos.forEach(f=>{
+  TEAMS.forEach(m=>{G.ai[m].fos.forEach(f=>{
     if(f.prog<10||f.down||!f.fighters||G.access[fosCountry(f.num)]===false)return;
     let left=Math.min(f.fighters,4),budget=f.fuel;
     while(left>0){let n=Math.min(2,left,Math.max(budget,0));if(n<=0&&Math.random()<.85)break;if(n<=0)n=1;left-=n;budget-=n;
@@ -802,7 +852,7 @@ function resolveFLines(){
 /* ---------- CSpOC role: MOBs fly on their own ---------- */
 function autoLift(){
   const blocked=new Set();
-  Object.keys(MOBS).forEach(m=>{const A=G.ai[m];let units=3+d(2)-(G.exord==='sealift'&&day()===1?1:0);
+  TEAMS.forEach(m=>{const A=G.ai[m];let units=3+d(2)-(G.exord==='sealift'&&day()===1?1:0);
     const open=A.fos.filter(f=>G.access[fosCountry(f.num)]!==false);
     for(let i=0;units>0&&open.length&&i<20;i++){const f=open[i%open.length];if(stormBlocks(f)){blocked.add(zoneOfFos(f.num));continue}deliver(m,f,1);units--}});
   {const st=G.space.storm;if(st&&st.t===G.turn&&covers(st.z,'WX')&&G.role==='cspoc'){G.mp+=5;log('ok',`Weather satellites forecast the typhoon over GEO zone ${st.z}, so airlift routes around it: +5 CSpOC points.`)}}
@@ -810,7 +860,7 @@ function autoLift(){
 }
 function autoSorties(){
   const mp0=G.mp,jam=new Set();let n=0;
-  Object.keys(MOBS).forEach(m=>G.ai[m].fos.forEach(f=>{
+  TEAMS.forEach(m=>G.ai[m].fos.forEach(f=>{
     if(f.prog<10||f.down||!f.fighters||G.access[fosCountry(f.num)]===false)return;
     if(jamBlocks(f)){jam.add(zoneOfFos(f.num));return}
     const reach=OP_AREAS[m][phase()].filter(h=>hexDist(f.hex,h)<=4);if(!reach.length)return;
@@ -821,9 +871,9 @@ function autoSorties(){
   jam.forEach(z=>log('bad',`PLA comm jamming in GEO zone ${z}: with no COMM satellite coverage, MOB sorties from zone ${z} are scrubbed.`));
   log(n?'ok':'acc',`The MOBs fly ${n} sortie${n===1?'':'s'}.`);
 }
-function moveFighters(){Object.keys(MOBS).forEach(m=>{const A=G.ai[m];A.fos.forEach(f=>{f.fighters+=f.inbound;f.inbound=0;
+function moveFighters(){TEAMS.forEach(m=>{const A=G.ai[m];A.fos.forEach(f=>{f.fighters+=f.inbound;f.inbound=0;
   if(f.prog<10)return;const room=rampF(f.ramp)-f.fighters;const mv=Math.min(Math.max(0,room),A.fightersMob);if(mv>0){A.fightersMob-=mv;f.inbound=mv}})})}
-function aiStrikes(){Object.keys(MOBS).forEach(m=>G.ai[m].fos.forEach(f=>{
+function aiStrikes(){TEAMS.forEach(m=>G.ai[m].fos.forEach(f=>{
   if(f.down>0){f.down--;return}if(f.prog<10||d(10)<=7)return;
   const mw=covers(zoneOfFos(f.num),'MW'),pla=d(20),def=d(10)+(mw?1:0)+1;if(mw&&G.role==='cspoc')G.mp+=2;
   if(pla>def){f.down=2;log('bad',`PLA missiles hit ${m}'s FOS ${f.num} (${pla} vs ${def}${mw?', missile warning +1':''}). No sorties from it for 2 turns.`);if(G.role==='medcom')addCas(f.num,3+d(6),'PLA missile strike')}}))}
@@ -841,10 +891,10 @@ function executeTheaterTurn(){
   if(G.role==='medcom'){medResolve();medComplete();medTreat()}
   if(G.role==='caoc'){resolveLines();resolveFLines()}else{autoLift();autoSorties()}
   moveFighters();
-  if(G.turn%turnsPerDay===0){log('h',`End of day ${day()}`);rollAccess(false);Object.keys(MOBS).forEach(m=>G.ai[m].lostC17=0);
+  if(G.turn%turnsPerDay===0){log('h',`End of day ${day()}`);rollAccess(false);TEAMS.forEach(m=>G.ai[m].lostC17=0);
     if(G.role==='medcom')medDayEnd()}
   if(G.turn%2===0){allocPool(); // a new apportionment every OPS block (guide 1.1.4.2)
-    if(G.role==='caoc')log('acc',`CFACC pool for the next block: ${G.pool.c17} C-17s and ${G.pool.c130} C-130s. Apportion them on the Theater tab.`)}
+    if(G.role==='caoc')log('acc',`CFACC pool for the next block: ${G.pool.c17} C-17s and ${G.pool.c130} C-130s. Apportion them on the Theater tab. TRANSCOM forecast for the block after: ${G.poolForecast}.`)}
   if(G.turn>=lastTurn()){endGame();save();return}
   G.turn++;
   log('h',`Day ${day()} · Turn ${G.turn} · ${phase()==='crisis'?'Crisis':'Conflict'}${isNight()?' · Night':''}`);
@@ -861,12 +911,12 @@ function theaterPanel(){
   let h=`<div class="stack"><p class="help">${G.role==='medcom'?'The four MOBs build and fly on their own. Their FOS are where casualties appear: PLA strikes hit ready FOS in conflict.':G.role==='caoc'?'Each MOB builds 2 FOS. A FOS needs 10 units of airlift to become fighter-ready (C-17 = 2 units, C-130 = 1). After that, lift goes to the ramp build and then fuel (4 fuel per unit). Fighters fly only from ready FOS and need 1 fuel per sortie.':'The four MOBs build and fly on their own. Your satellites decide whether they can strike: they only attack identified targets, comm jamming scrubs a zone without COMM coverage, and a typhoon cancels a zone\'s airlift without WX coverage.'}</p>`;
   if(G.role==='caoc'){const used=Object.values(G.appo).reduce((a,x)=>({c17:a.c17+x.c17,c130:a.c130+x.c130}),{c17:0,c130:0});
     h+=`<div class="fos"><div class="fos-head"><b>Apportionment for day ${day()}</b><span class="small muted">Pool: ${G.pool.c17} C-17 · ${G.pool.c130} C-130 · assigned ${used.c17} / ${used.c130}</span></div>
-    <div class="tbl"><table><thead><tr><th>MOB</th><th>C-17</th><th>C-130</th><th>Needs</th></tr></thead><tbody>${Object.keys(MOBS).map(m=>{const A=G.ai[m];const need=A.fos.map(f=>f.prog<10?`FOS ${f.num} ${f.prog}/10`:`FOS ${f.num} ${f.fuel} fuel`).join(' · ');
+    <div class="tbl"><table><thead><tr><th>MOB</th><th>C-17</th><th>C-130</th><th>Needs</th></tr></thead><tbody>${TEAMS.map(m=>{const A=G.ai[m];const need=A.fos.map(f=>f.prog<10?`FOS ${f.num} ${f.prog}/10`:`FOS ${f.num} ${f.fuel} fuel`).join(' · ');
       return `<tr><td><b style="color:${MOB_COLOR[m]}">■</b> ${MOBS[m].n}</td><td><input type="number" min="0" max="${G.pool.c17}" value="${G.appo[m].c17}" data-appo="${m}|c17" aria-label="${m} C-17s"></td><td><input type="number" min="0" max="${G.pool.c130}" value="${G.appo[m].c130}" data-appo="${m}|c130" aria-label="${m} C-130s"></td><td class="small">${need}</td></tr>`}).join('')}</tbody></table></div>
     <p class="small muted">Changes rebuild this turn's airlift ATO. ${used.c17>G.pool.c17||used.c130>G.pool.c130?'<b style="color:var(--bad)">You have assigned more aircraft than the pool holds.</b>':''}</p></div>`}
   if(G.role==='cspoc'&&G.ccir)h+=`<div class="fos"><b>CCIR this turn:</b> <span>look at hex ${hexLabel(G.ccir.hex)} with an MW, ISR or SDA satellite for +3 MP. ${G.ccir.done?'<span class="pill ok">done</span>':G.ccir.t===G.turn?'<span class="pill warn">open</span>':'<span class="pill">expired</span>'}</span></div>`;
   h+='<div class="tbl"><table><thead><tr><th>MOB / FOS</th><th>Build</th><th>Ramp (MOG)</th><th>Fighters</th><th>Fuel</th><th>Status</th></tr></thead><tbody>';
-  Object.keys(MOBS).forEach(m=>{const A=G.ai[m];h+=`<tr><td colspan="6"><b style="color:${MOB_COLOR[m]}">■</b> <b>${MOBS[m].n}</b> <span class="small muted">${MOBS[m].ft}s · ${A.fightersMob} at the MOB${A.lostF?` · ${A.lostF} lost`:''}</span></td></tr>`;
+  TEAMS.forEach(m=>{const A=G.ai[m];h+=`<tr><td colspan="6"><b style="color:${MOB_COLOR[m]}">■</b> <b>${MOBS[m].n}</b> <span class="small muted">${MOBS[m].ft}s · ${A.fightersMob} at the MOB${A.lostF?` · ${A.lostF} lost`:''}</span></td></tr>`;
     A.fos.forEach(f=>{const st=G.access[fosCountry(f.num)]===false?'<span class="pill bad">no access</span>':f.down?`<span class="pill bad">struck (${f.down})</span>`:f.prog>=10?'<span class="pill ok">ready</span>':'<span class="pill">building</span>';
       h+=`<tr><td>FOS ${f.num} <span class="muted small">${fosCountry(f.num)} · hex ${hexLabel(f.hex)} · zone ${zoneOfFos(f.num)}</span></td><td><div class="meter"><i style="width:${f.prog*10}%"></i></div></td><td class="small">${rampL(f.ramp)}${f.fork?'':' · <b style="color:var(--warn)">no forklift</b>'}</td><td class="mono">${f.fighters}${f.inbound?` +${f.inbound}`:''}</td><td class="mono">${f.fuel}</td><td>${st}</td></tr>`})});
   return h+'</tbody></table></div></div>';
@@ -876,7 +926,7 @@ function airPanel(){
   const tally=liveTally();const open=G.lines.filter(L=>!L.dec).length;
   let h=`<div class="stack"><p class="help">Verify every line before it flies. Check <b>range</b> (land: distance ≤ range; download and return: distance + 1 + distance ≤ range; C-130 3, C-17 4), the <b>load against the config</b>, a <b>forklift</b> for pallets, and the <b>ramp</b>: aircraft left on the ground ≤ MOG and PPRs ≤ 2 × MOG (C-130 = 1, C-17 = 1.5). Lines are checked in order against the lines you approved above them.</p>
   <div class="row"><span class="small">${open} of ${G.lines.length} not reviewed (held if you execute).</span><button class="btn sm" id="okall">Approve all unreviewed</button></div>
-  <div class="tbl"><table><thead><tr><th>Station</th><th>MOG</th><th>Forklift</th><th>Ground at end</th><th>PPRs</th></tr></thead><tbody>${Object.keys(MOBS).flatMap(m=>G.ai[m].fos.map(f=>{const t=tally[f.num]||{g:0,p:0},U=rampU(f.ramp);return `<tr><td><b style="color:${MOB_COLOR[m]}">■</b> FOS ${f.num}</td><td class="small">${rampL(f.ramp)}</td><td>${f.fork?'yes':'<b style="color:var(--warn)">no</b>'}</td><td class="mono">${fmt(t.g)} / ${U}</td><td class="mono">${fmt(t.p)} / ${2*U}</td></tr>`})).join('')}</tbody></table></div>`;
+  <div class="tbl"><table><thead><tr><th>Station</th><th>MOG</th><th>Forklift</th><th>Ground at end</th><th>PPRs</th></tr></thead><tbody>${TEAMS.flatMap(m=>G.ai[m].fos.map(f=>{const t=tally[f.num]||{g:0,p:0},U=rampU(f.ramp);return `<tr><td><b style="color:${MOB_COLOR[m]}">■</b> FOS ${f.num}</td><td class="small">${rampL(f.ramp)}</td><td>${f.fork?'yes':'<b style="color:var(--warn)">no</b>'}</td><td class="mono">${fmt(t.g)} / ${U}</td><td class="mono">${fmt(t.p)} / ${2*U}</td></tr>`})).join('')}</tbody></table></div>`;
   if(!G.lines.length)h+='<p class="muted small">No airlift lines this turn.</p>';
   G.lines.forEach(L=>{const c=AC[L.type].cfg.find(c=>c.n===L.cfg);
     h+=`<div class="ac"><div class="row" style="justify-content:space-between"><b class="mono"><span style="color:${MOB_COLOR[L.mob]}">■</span> ${esc(L.cs)} · ${L.type}</b><span class="small muted">${MOBS[L.mob].n} → FOS ${L.fos} · ${L.dist} hex${L.dist===1?'':'es'}</span></div>
@@ -917,7 +967,7 @@ function renderTheater(){
   <div class="grid">
     <div class="stack">
       <div class="card">${mapSVG()}
-        <div class="legend">${Object.keys(MOBS).map(m=>`<span><i style="border-color:${MOB_COLOR[m]};border-style:dashed"></i>${m} op areas</span>`).join('')}<span><i style="border-color:#c1121f;background:#c1121f"></i>Identified PLA</span><span><i style="border-color:#5b6670;background:#5b6670"></i>Unidentified</span><span><i style="border-color:#38d0f0;border-style:dashed"></i>Satellite footprint</span><span>Scroll, pinch or + / − to zoom. Drag to pan.</span></div>
+        <div class="legend">${TEAMS.map(m=>`<span><i style="border-color:${MOB_COLOR[m]};border-style:dashed"></i>${m} op areas</span>`).join('')}<span><i style="border-color:#c1121f;background:#c1121f"></i>Identified PLA</span><span><i style="border-color:#5b6670;background:#5b6670"></i>Unidentified</span><span><i style="border-color:#38d0f0;border-style:dashed"></i>Satellite footprint</span><span>Scroll, pinch or + / − to zoom. Drag to pan.</span></div>
       </div>
       <div class="card stack" style="gap:6px"><h3>Orders</h3><p class="small" style="margin:0"><b>EXORD:</b> ${esc(EXORDS[G.exord].n)}. <span class="muted">${esc(EXORDS[G.exord].d)}</span></p><p class="small" style="margin:0"><b>FRAGORD:</b> ${G.frag?`${esc(FRAGORDS[G.frag].n)}. <span class="muted">${esc(FRAGORDS[G.frag].d)}</span>`:`<span class="muted">arrives at the start of day 3 (turn ${2*turnsPerDay+1}).</span>`}</p></div>
       <div class="card"><h3>Turn log</h3><div class="log" id="log">${G.log.slice(-90).map(l=>`<p class="${l.cls}">${esc(l.msg)}</p>`).join('')}</div></div>
@@ -959,7 +1009,7 @@ function overModalTheater(){const net=mpNet(),tgt=goal();const lostF=Object.valu
   return `<div class="overlay" id="ov2"><div class="modal" role="dialog" aria-label="Campaign result">
   <h2>${net>=tgt?'Victory':'Defeat'}: ${net} net MP of ${tgt}</h2>
   <div class="tbl"><table><tbody><tr><td>${G.role==='medcom'?'MEDCOM victory points':'Theater mission points'}</td><td class="mono">${G.mp}</td></tr><tr><td>Demoralization points</td><td class="mono">${G.dp} (−${Math.floor(G.dp/5)} MP)</td></tr>
-  ${G.role==='medcom'?`<tr><td>Patients returned to duty</td><td class="mono">${G.med.treated} (${G.med.air} in the air)</td></tr><tr><td>Deaths</td><td class="mono">${G.med.died}</td></tr><tr><td>CASEVAC rescues</td><td class="mono">${G.med.rescued}${G.med.captured?` · ${G.med.captured} captured`:''}</td></tr><tr><td>MEDEVAC flights</td><td class="mono">${G.med.evacs}</td></tr><tr><td>Hospitals open</td><td class="mono">${Object.keys(MOBS).filter(hOpen).length} of 4</td></tr>`:G.role==='caoc'?`<tr><td>ATO calls right</td><td class="mono">${G.acc.ok} of ${G.acc.ok+G.acc.bad}</td></tr>`:`<tr><td>PLA targets identified</td><td class="mono">${G.space.ident}</td></tr><tr><td>CCIRs answered</td><td class="mono">${G.acc.ccir}</td></tr><tr><td>US satellites lost</td><td class="mono">${G.space.lost}</td></tr>`}
+  ${G.role==='medcom'?`<tr><td>Patients returned to duty</td><td class="mono">${G.med.treated} (${G.med.air} in the air)</td></tr><tr><td>Deaths</td><td class="mono">${G.med.died}</td></tr><tr><td>CASEVAC rescues</td><td class="mono">${G.med.rescued}${G.med.captured?` · ${G.med.captured} captured`:''}</td></tr><tr><td>MEDEVAC flights</td><td class="mono">${G.med.evacs}</td></tr><tr><td>Hospitals open</td><td class="mono">${TEAMS.filter(hOpen).length} of 4</td></tr>`:G.role==='caoc'?`<tr><td>ATO calls right</td><td class="mono">${G.acc.ok} of ${G.acc.ok+G.acc.bad}</td></tr>`:`<tr><td>PLA targets identified</td><td class="mono">${G.space.ident}</td></tr><tr><td>CCIRs answered</td><td class="mono">${G.acc.ccir}</td></tr><tr><td>US satellites lost</td><td class="mono">${G.space.lost}</td></tr>`}
   <tr><td>Sorties flown</td><td class="mono">${G.sorties}</td></tr><tr><td>PLA targets destroyed</td><td class="mono">${G.kills}</td></tr><tr><td>Fighters lost</td><td class="mono">${lostF}</td></tr><tr><td>FOS ready at the end</td><td class="mono">${ready} of 8</td></tr></tbody></table></div>
   <div class="row"><button class="btn" id="seelog">Review the log</button><button class="btn primary" id="again">New campaign</button></div></div></div>`}
 function bindTheater(){
@@ -1011,7 +1061,7 @@ function hUsed(m,c){return H(m).bed.filter(p=>p.c===c).length}
 const canTreat=(m,c)=>hDone(m,3)&&PAT[c].cure&&hDone(m,PAT[c].cure)&&(c!=='R'||hDone(m,1));
 const airTreat=m=>[9,10,11,12].every(t=>hDone(m,t));
 function hNeed(m,t){const T=HOSP_TASKS[t],g=H(m).got[t]||{pax:0,pp:0};return {pax:Math.max(0,T.pax-g.pax),pp:Math.max(0,T.pp-g.pp)}}
-function allFos(){return Object.keys(MOBS).flatMap(m=>G.ai[m].fos.map(f=>({m,f})))}
+function allFos(){return TEAMS.flatMap(m=>G.ai[m].fos.map(f=>({m,f})))}
 function medFos(n){const x=allFos().find(o=>o.f.num===+n);return x&&x.f}
 function rollColor(){const r=d(10);return r<=4?'G':r<=7?'Y':r<=9?'R':'B'}
 function addCas(fosNum,n,why){const L=G.med.cas[fosNum]||(G.med.cas[fosNum]=[]);const tally={G:0,Y:0,R:0,B:0};
@@ -1019,7 +1069,7 @@ function addCas(fosNum,n,why){const L=G.med.cas[fosNum]||(G.med.cas[fosNum]=[]);
   log('bad',`${why}: ${n} casualties at FOS ${fosNum} (${Object.entries(tally).filter(([,v])=>v).map(([k,v])=>`${v} ${PAT[k].n}`).join(', ')}). MEDEVAC them to an open hospital.`)}
 function casCount(n){return (G.med.cas[n]||[]).length}
 function medInit(){
-  const hosp={};Object.keys(MOBS).forEach(m=>hosp[m]={done:[],got:{},bed:[],hall:[],helo:false,heloLost:false,heloGot:0});
+  const hosp={};TEAMS.forEach(m=>hosp[m]={done:[],got:{},bed:[],hall:[],helo:false,heloLost:false,heloGot:0});
   G.med={hosp,sup:{band:4,pharm:4,iv:4,oxy:4,blood:3,ppe:3,fuel:3},fleet:[],cas:{},downed:[],tc:[],tcDay:0,treated:0,air:0,died:0,rescued:0,captured:0,evacs:0,seq:1,cs:0};
   medFleet()}
 function medFleet(){const M=G.med,old=M.fleet||[];const n17=2+(d(4)>=3?1:0),n130=2+(d(4)>=3?1:0);const list=[['C-5',1],['C-17',n17],['C-130',n130]];
@@ -1072,7 +1122,7 @@ function medResolve(){const M=G.med;const used={band:0,pharm:0,iv:0,oxy:0};
 function admit(m,p){const b=hBeds(m);if(p.c!=='B'&&hUsed(m,p.c)<b[p.c])H(m).bed.push({c:p.c,left:PAT[p.c].days,age:0});else H(m).hall.push({c:p.c,age:0})}
 function die(n,where){if(!n)return;G.med.died+=n;G.dp+=n;log('bad',`${n} expectant patient${n===1?'':'s'} die${n===1?'s':''} ${where}: +${n} DP.`)}
 function medTreat(){const M=G.med;
-  Object.keys(MOBS).forEach(m=>{const h=H(m);let done=0,blk=0;
+  TEAMS.forEach(m=>{const h=H(m);let done=0,blk=0;
     h.bed=h.bed.filter(p=>{if(canTreat(m,p.c)){p.left--;if(p.left<=0){done++;return false}return true}
       p.age++;if(p.age>=2){p.age=0;const n=WORSE[p.c];if(n==='B'){blk++;return false}p.c=n;p.left=PAT[n].days;if(hUsed(m,n)>=hBeds(m)[n]){h.hall.push({c:n,age:0});return false}}return true});
     if(done){M.treated+=done;G.mp+=done;log('ok',`${MOBS[m].n} hospital returns ${done} patient${done===1?'':'s'} to duty: +${done} MP.`)}
@@ -1083,7 +1133,7 @@ function medTreat(){const M=G.med;
   Object.keys(M.cas).forEach(n=>{let black=0;M.cas[n]=M.cas[n].filter(p=>{if(p.c==='B'){black++;return false}p.age++;if(p.age>=2){p.age=0;p.c=WORSE[p.c]}return true});die(black,`waiting at FOS ${n}`)});
   M.downed=M.downed.filter(p=>{p.age=(p.age||0)+1;if(p.age>3){M.captured++;G.dp++;log('bad',`The ${p.ft} pilot down in hex ${hexLabel(p.hex)} is captured: +1 DP.`);return false}return true});
 }
-function medComplete(){let any=true;while(any){any=false;Object.keys(MOBS).forEach(m=>{const h=H(m);Object.keys(HOSP_TASKS).forEach(t=>{t=+t;if(h.done.includes(t))return;const T=HOSP_TASKS[t],g=h.got[t];if(!g||g.pax<T.pax||g.pp<T.pp)return;
+function medComplete(){let any=true;while(any){any=false;TEAMS.forEach(m=>{const h=H(m);Object.keys(HOSP_TASKS).forEach(t=>{t=+t;if(h.done.includes(t))return;const T=HOSP_TASKS[t],g=h.got[t];if(!g||g.pax<T.pax||g.pp<T.pp)return;
   if(!T.pre.every(p=>h.done.includes(p)))return;h.done.push(t);any=true;if(t===6){h.helo=true}log('ok',`${MOBS[m].n} hospital completes Task ${t} ${T.n}. ${T.fx}.`)})})}}
 function medDayEnd(){const M=G.med,miss=Object.keys(SUP).filter(k=>M.sup[k]<1);Object.keys(SUP).forEach(k=>M.sup[k]=Math.max(0,M.sup[k]-1));
   if(miss.length){G.dp+=5;log('bad',`MEDCOM tax: short of ${miss.map(k=>SUP[k].toLowerCase()).join(', ')}. +5 DP.`)}else log('acc','MEDCOM pays the daily tax: 1 each of blood, PPE, bandages, IV, oxygen, fuel and pharmaceuticals.')}
@@ -1107,7 +1157,7 @@ function medTC(kind){const M=G.med;if(M.tcDay===day())return;M.tcDay=day();const
 function bedRow(m){const b=hBeds(m),h=H(m);return ['G','Y','R'].map(c=>`<span class="pill" style="border-color:${PAT[c].col}"><b style="color:${PAT[c].col}">●</b> ${hUsed(m,c)}/${b[c]}</span>`).join(' ')+(h.hall.length?` <span class="pill bad">${h.hall.length} without a bed</span>`:'')}
 function hospPanel(){
   let h=`<div class="stack"><p class="help">Stand up four hospitals at Kadena, Andersen, Yokota and Osan. A task completes when all of its people and pallets have landed and its prerequisites are done. Task 4 opens the hospital. Patients are only treated with <b>Triage (3)</b> plus the cure task for their color: Green needs 7, Yellow needs 6, Red needs 2 (and 2 needs Blood, Task 1). Treatment takes 1, 2 or 3 turns. Untreated patients get worse every 2 turns, Black patients die after 1 turn, and each death is +1 DP.</p>`;
-  Object.keys(MOBS).forEach(m=>{const H0=H(m);const n=H0.done.length;
+  TEAMS.forEach(m=>{const H0=H(m);const n=H0.done.length;
     h+=`<div class="fos"><div class="fos-head"><b><span style="color:${MOB_COLOR[m]}">■</span> ${MOBS[m].n} hospital</b><span class="small muted">${n}/16 tasks · ${hOpen(m)?'open':'not open'}${H0.helo?' · HH-60 ready':H0.heloLost?' · HH-60 lost':''}${airTreat(m)?' · treats Green in the air':''}</span></div>
     <div class="row small">${bedRow(m)} <span class="muted">treats:</span> ${['G','Y','R'].filter(c=>canTreat(m,c)).map(c=>`<b style="color:${PAT[c].col}">${PAT[c].n}</b>`).join(', ')||'<span class="muted">nothing yet</span>'}</div>
     <div class="tasks">${Object.keys(HOSP_TASKS).map(t=>{const T=HOSP_TASKS[t],done=H0.done.includes(+t),g=H0.got[t]||{pax:0,pp:0},pre=T.pre.filter(p=>!H0.done.includes(p));
@@ -1121,15 +1171,15 @@ function matoPanel(){const M=G.med;
   M.fleet.forEach(a=>{const mis=a.mis||{};const can=a.type==='C-5'?['cargo']:a.type==='C-130'?['evac']:['cargo','evac'];
     h+=`<div class="ac"><div class="row" style="justify-content:space-between"><b class="mono">${esc(a.cs)} · ${a.type}</b>${a.busy?'<span class="pill">flying back to JBPHH</span>':`<select data-mmis="${a.id}" aria-label="${esc(a.cs)} mission"><option value="">Idle</option>${can.map(k=>`<option value="${k}" ${mis.k===k?'selected':''}>${k==='cargo'?'Cargo from JBPHH':'MEDEVAC'}</option>`).join('')}</select>`}</div>`;
     if(!a.busy&&mis.k==='cargo'){const ld=medLoad(a),c=ld.cfg||medCfg(a);
-      h+=`<div class="row small"><label>To <select data-mto="${a.id}" aria-label="Destination"><option value="">choose</option>${Object.keys(MOBS).map(m=>`<option value="${m}" ${mis.to===m?'selected':''}>${MOBS[m].n}</option>`).join('')}</select></label>
+      h+=`<div class="row small"><label>To <select data-mto="${a.id}" aria-label="Destination"><option value="">choose</option>${TEAMS.map(m=>`<option value="${m}" ${mis.to===m?'selected':''}>${MOBS[m].n}</option>`).join('')}</select></label>
       <label>Config <select data-mcfg="${a.id}" aria-label="Config">${AC[a.type].cfg.map(x=>`<option ${c.n===x.n?'selected':''}>${x.n}</option>`).join('')}</select></label><span>${c.pp} PP + ${c.pax} PAX · loaded <b>${ld.pp} PP + ${ld.pax} PAX</b></span></div>`;
       if(mis.to){const open=Object.keys(HOSP_TASKS).filter(t=>!hDone(mis.to,t)&&(hNeed(mis.to,t).pax||hNeed(mis.to,t).pp));if(H(mis.to).heloLost)open.push('helo');
         h+=`<div class="loadlist small">${open.map(t=>{const nd=t==='helo'?{pax:0,pp:8-H(mis.to).heloGot}:hNeed(mis.to,t);const it=ld.items.find(i=>i.t===t);const on=(mis.tasks||[]).includes(t);
           return `<label class="row" style="justify-content:space-between"><span><input type="checkbox" data-mtask="${a.id}|${t}" ${on?'checked':''}> ${t==='helo'?'HH-60 replacement':`Task ${t} ${esc(HOSP_TASKS[t].n)}`} <span class="muted">needs ${nd.pax} PAX + ${nd.pp} PP</span></span><span class="mono">${on?(it&&(it.pp||it.pax)?`${it.pax}+${it.pp}${it.full?' ✓':' partial'}`:'no room'):''}</span></label>`}).join('')||'<span class="muted">Every task here is fully shipped.</span>'}</div>`}}
     if(!a.busy&&mis.k==='evac'){const errs=evacCheck(a);const fs=allFos();
-      h+=`<div class="row small"><label>Base <select data-mfrom="${a.id}" aria-label="Base"><option value="">choose</option>${Object.keys(MOBS).map(m=>`<option value="${m}" ${mis.from===m?'selected':''}>${MOBS[m].n}</option>`).join('')}</select></label>
+      h+=`<div class="row small"><label>Base <select data-mfrom="${a.id}" aria-label="Base"><option value="">choose</option>${TEAMS.map(m=>`<option value="${m}" ${mis.from===m?'selected':''}>${MOBS[m].n}</option>`).join('')}</select></label>
       <label>Pick up at <select data-mfos="${a.id}" aria-label="FOS"><option value="">choose</option>${fs.map(o=>`<option value="${o.f.num}" ${+mis.fos===o.f.num?'selected':''}>FOS ${o.f.num} (${casCount(o.f.num)} waiting${mis.from?`, ${hexDist(MOBS[mis.from].hex,o.f.hex)} hex`:''})</option>`).join('')}</select></label>
-      <label>To <select data-mdest="${a.id}" aria-label="Hospital"><option value="">choose</option>${Object.keys(MOBS).map(m=>`<option value="${m}" ${mis.to===m?'selected':''}>${MOBS[m].n}${hOpen(m)?'':' (closed)'}${mis.fos?`, ${hexDist(medFos(mis.fos).hex,MOBS[m].hex)} hex`:''}</option>`).join('')}</select></label></div>
+      <label>To <select data-mdest="${a.id}" aria-label="Hospital"><option value="">choose</option>${TEAMS.map(m=>`<option value="${m}" ${mis.to===m?'selected':''}>${MOBS[m].n}${hOpen(m)?'':' (closed)'}${mis.fos?`, ${hexDist(medFos(mis.fos).hex,MOBS[m].hex)} hex`:''}</option>`).join('')}</select></label></div>
       <div class="small">${errs.length?errs.map(e=>`<span style="color:var(--bad)">✗ ${esc(e)}</span>`).join('<br>'):`<span style="color:var(--ok)">✓ Legal. Lifts up to ${EVAC_CAP[a.type]} litters${airTreat(mis.from)?'. Green patients are treated in the air':''}.</span>`}</div>`}
     h+='</div>'});
   return h+'</div>';
@@ -1140,7 +1190,7 @@ function patPanel(){const M=G.med;
   h+=`<h3>Waiting at FOS</h3>${rows.length?`<div class="tbl"><table><thead><tr><th>FOS</th><th>Hex</th>${['R','Y','G','B'].map(c=>`<th style="color:${PAT[c].col}">${PAT[c].n}</th>`).join('')}</tr></thead><tbody>${rows.map(([n,L])=>`<tr><td>FOS ${n}</td><td class="mono">${hexLabel(medFos(n).hex)}</td>${['R','Y','G','B'].map(c=>`<td class="mono">${L.filter(p=>p.c===c).length}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`:'<p class="muted small">No casualties waiting.</p>'}`;
   h+=`<h3>Downed pilots</h3>`;
   if(!M.downed.length)h+='<p class="muted small">None.</p>';
-  M.downed.forEach(p=>{const ok=Object.keys(MOBS).filter(m=>H(m).helo&&hexDist(MOBS[m].hex,p.hex)<=3);const threat=(G.pla[p.hex]||[]).some(t=>t.s!=='sj'&&t.s!=='aj'&&t.id>0);
+  M.downed.forEach(p=>{const ok=TEAMS.filter(m=>H(m).helo&&hexDist(MOBS[m].hex,p.hex)<=3);const threat=(G.pla[p.hex]||[]).some(t=>t.s!=='sj'&&t.s!=='aj'&&t.id>0);
     h+=`<div class="ac small"><b>${p.ft} pilot · hex ${hexLabel(p.hex)}</b> · down ${p.age||0} turn${p.age===1?'':'s'}${threat?' · <b style="color:var(--bad)">PLA contacts in hex</b>':''}<div class="row">${ok.length?ok.map(m=>`<button class="btn sm ${p.go===m?'primary':''}" data-casevac="${p.id}|${m}">CASEVAC from ${MOBS[m].n} (${hexDist(MOBS[m].hex,p.hex)} hex)</button>`).join(''):'<span class="muted">No HH-60 within 3 hexes.</span>'}</div></div>`});
   h+=`<h3>TRANSCOM</h3><p class="small muted">One request per day. It arrives 2 turns later. The daily tax takes 1 of each supply, and any shortfall is +5 DP.</p>
   <div class="row">${M.tcDay===day()?'<span class="small">Today\'s request is in.</span>':'<button class="btn sm" data-medtc="evac">Request MEDEVAC supplies (+4 bandage, pharma, IV, oxygen)</button><button class="btn sm" data-medtc="sus">Request blood, PPE, fuel (+3 each)</button>'}</div>`;
@@ -1158,7 +1208,7 @@ function bindMed(){const M=G.med;const ac=id=>M.fleet.find(a=>a.id==id);const up
   document.querySelectorAll('[data-medtc]').forEach(b=>b.onclick=()=>{medTC(b.dataset.medtc);up()});
 }
 function medMapSVG(){let s='';const M=G.med;
-  Object.keys(MOBS).forEach(m=>{const {x,y}=hexXY(MOBS[m].hex);const open=hOpen(m);s+=`<g><rect x="${x-11}" y="${y+14}" width="22" height="16" rx="3" fill="${open?'#fff':'#555'}" stroke="#c1121f" stroke-width="2"/><text x="${x}" y="${y+26}" font-size="12" text-anchor="middle" fill="#c1121f" font-weight="bold">✚</text></g>`});
+  TEAMS.forEach(m=>{const {x,y}=hexXY(MOBS[m].hex);const open=hOpen(m);s+=`<g><rect x="${x-11}" y="${y+14}" width="22" height="16" rx="3" fill="${open?'#fff':'#555'}" stroke="#c1121f" stroke-width="2"/><text x="${x}" y="${y+26}" font-size="12" text-anchor="middle" fill="#c1121f" font-weight="bold">✚</text></g>`});
   Object.entries(M.cas).forEach(([n,L])=>{if(!L.length)return;const f=medFos(n);const {x,y}=hexXY(f.hex);s+=`<g><circle cx="${x}" cy="${y-24}" r="11" fill="#c1121f" stroke="#fff" stroke-width="2"/><text x="${x}" y="${y-20}" font-size="11" text-anchor="middle" fill="#fff" font-family="monospace">${L.length}</text></g>`});
   M.downed.forEach(p=>{const {x,y}=hexXY(p.hex);s+=`<g><circle cx="${x+18}" cy="${y+18}" r="10" fill="#ffd166" stroke="#10202a" stroke-width="2"/><text x="${x+18}" y="${y+22}" font-size="11" text-anchor="middle" fill="#10202a">⚑</text></g>`});
   return s}
@@ -1232,14 +1282,14 @@ function mapSVG(){
   const V=UI.view||MAP_VIEW;
   let s=`<div class="mapbox"><div class="zoomctl"><button class="btn sm" id="zin" aria-label="Zoom in">+</button><button class="btn sm" id="zout" aria-label="Zoom out">−</button><button class="btn sm" id="zreset">Fit</button></div><svg id="mapsvg" viewBox="${V.join(' ')}" role="img" aria-label="Theater map with hex grid">
     <image href="${MAP_IMG}" x="330" y="0" width="995" height="685" preserveAspectRatio="none"/>`;
-  if(isTheater())Object.keys(MOBS).forEach((m,i)=>OP_AREAS[m][phase()].forEach(h=>{const {x,y}=hexXY(h);const k=0.92-i*0.1;const pts=[];for(let j=0;j<6;j++){const a=Math.PI/180*(60*j-30);pts.push((x+HEXR*k*Math.cos(a)).toFixed(1)+','+(y+HEXR*k*Math.sin(a)).toFixed(1))}
+  if(isTheater())TEAMS.forEach((m,i)=>OP_AREAS[m][phase()].forEach(h=>{const {x,y}=hexXY(h);const k=0.92-i*0.1;const pts=[];for(let j=0;j<6;j++){const a=Math.PI/180*(60*j-30);pts.push((x+HEXR*k*Math.cos(a)).toFixed(1)+','+(y+HEXR*k*Math.sin(a)).toFixed(1))}
     s+=`<polygon points="${pts.join(' ')}" fill="none" stroke="${MOB_COLOR[m]}" stroke-width="2.5" stroke-dasharray="6 4"/>`}));
   else areas.forEach(h=>{s+=`<polygon points="${poly(h)}" fill="rgba(224,33,138,.12)" stroke="#e0218a" stroke-width="2.5" stroke-dasharray="6 4"/>`});
   Object.entries(G.pla).forEach(([h,l])=>{const t=l.filter(t=>t.id>0);if(!t.length)return;const {x,y}=hexXY(+h);t.forEach((k,i)=>{const idd=k.id===2;s+=`<g><rect x="${x-26+i*24}" y="${y+8}" width="22" height="16" rx="2" fill="${idd?'#c1121f':'#5b6670'}" stroke="#fff"/><text x="${x-15+i*24}" y="${y+20}" font-size="10" text-anchor="middle" fill="#fff" font-family="monospace" font-weight="700">${idd?TOKEN_TAG(k):'?'}</text></g>`})});
   G.space.sats.forEach(sat=>{if(!sat.alive||sat.orbit==='G')return;const h=satHex(sat);if(h==null)return;const {x,y}=hexXY(h);const wide=lookHexes(sat).length>1;
     s+=wide?`<circle cx="${x}" cy="${y}" r="${HEXR*1.85}" fill="none" stroke="#38d0f0" stroke-width="2" stroke-dasharray="3 5" opacity=".9"/>`:'';
     s+=`<g><rect x="${x-46}" y="${y-30}" width="${sat.code.length*7+8}" height="15" rx="2" fill="#063a4a" opacity=".9"/><text x="${x-42}" y="${y-19}" font-size="10" fill="#7fe6ff" font-family="monospace">${sat.code}</text></g>`});
-  if(isTheater()){Object.keys(MOBS).forEach(m=>{const {x,y}=hexXY(MOBS[m].hex);s+=`<circle cx="${x}" cy="${y}" r="17" fill="none" stroke="${MOB_COLOR[m]}" stroke-width="5"/>`;
+  if(isTheater()){TEAMS.forEach(m=>{const {x,y}=hexXY(MOBS[m].hex);s+=`<circle cx="${x}" cy="${y}" r="17" fill="none" stroke="${MOB_COLOR[m]}" stroke-width="5"/>`;
       G.ai[m].fos.forEach((f,i)=>{const p=hexXY(f.hex);const ox=(i?14:-14)+(m==='Osan'||m==='Andersen'?6:0),oy=m==='Osan'||m==='Andersen'?12:-4;s+=`<g><rect x="${p.x+ox-15}" y="${p.y+oy-9}" width="30" height="17" rx="3" fill="${f.prog>=10?(f.down?'#7a1010':'#0d5c34'):'#10202a'}" stroke="${MOB_COLOR[m]}" stroke-width="2"/><text x="${p.x+ox}" y="${p.y+oy+4}" font-size="10" text-anchor="middle" fill="#fff" font-family="monospace">${f.num}${f.prog>=10?'✓':'·'+f.prog}</text></g>`})});if(G.role==='medcom')s+=medMapSVG()}
   else{const {x,y}=hexXY(M.hex);s+=`<circle cx="${x}" cy="${y}" r="20" fill="none" stroke="#ffd166" stroke-width="4"/>`}
   G.fos.forEach(f=>{const {x,y}=hexXY(fosHex(f));const sel=UI.selFos===f.num;s+=`<circle cx="${x}" cy="${y}" r="${sel?28:24}" fill="none" stroke="#ff7b00" stroke-width="${sel?5:3}"/>`});
@@ -1297,8 +1347,8 @@ function availableLoads(dest){
   Object.keys(EXTRAS).forEach(x=>{if(f.extras[x])return;if(x==='gear'&&FOS_COLOR[f.num]!=='red')return;if(x==='light'&&FOS_COLOR[f.num]!=='yellow')return;if(x==='assess'&&f.assessed)return;if(x==='gbr'&&G.fos.some(o=>o.extras.gbr))return;out.push({k:'extra',x,fos:f.num,avail:G.kits[x]??0})});
   return out;
 }
-function plannedFor(f){const out={},rej=caocMog();G.aircraft.forEach(a=>{const p=a.plan;if(!p||String(p.dest)!==String(f.num)||a.loc.k!=='mob'||a.broken)return;const c=planCheck(a);if(!c.ok||c.hold||rej[a.id])return;
-  (p.load||[]).forEach(it=>{if(it.k!=='kit')return;const o=out[it.t]||(out[it.t]={team:null,eq:null});o[it.p]=a.cs})});return out}
+function plannedFor(f){const out={},rej=caocMog();G.aircraft.forEach(a=>{const p=a.plan;if(!p||(String(p.dest)!==String(f.num)&&String(p.via)!==String(f.num))||a.loc.k!=='mob'||a.broken)return;const c=planCheck(a);if(!c.ok||c.hold||rej[a.id]||c.intent==='transit')return;
+  (p.load||[]).forEach(it=>{if(it.k!=='kit'||it.fos!==f.num)return;const o=out[it.t]||(out[it.t]={team:null,eq:null});o[it.p]=a.cs})});return out}
 function reqStatus(f,t,plan){const T=TASKS[t],k=kitNeed(f,t),g=f.got[t]||{},pl=plan[t]||{};
   const part=(kind,n,unit)=>{if(n===0)return {ok:true,txt:'not needed',cls:'muted'};if(g[kind]||f.site[t])return {ok:true,txt:'on site',cls:'ok'};
     if(pl[kind])return {ok:true,txt:`on ${pl[kind]}`,cls:'acc'};const have=(kind==='team'?G.kits[t]:G.equip[t])??0;
@@ -1314,13 +1364,19 @@ function fosReqTable(f){const plan=plannedFor(f);const ready=FIGHTER_TASKS.filte
   <div class="tbl"><table class="req"><thead><tr><th>Task</th><th>Team</th><th>Equipment</th><th>Status</th></tr></thead><tbody>${Object.keys(TASKS).map(Number).map(t=>{const r=reqStatus(f,t,plan);
     return `<tr class="${f.done[t]?'muted':''}"><td>${FIGHTER_TASKS.includes(t)?'★ ':''}<b class="mono">${t}</b> ${esc(TASKS[t].n)}</td><td>${f.done[t]?'':tag(r.team)}</td><td>${f.done[t]?'':tag(r.eq)}</td><td><span style="color:var(--${r.cls==='warn'?'warn':r.cls==='bad'?'bad':'ok'})">${esc(r.st)}</span></td></tr>`}).join('')}</tbody></table></div>`}
 function loadCovers(a){const p=a.plan;if(!p||!p.load||!p.load.length||!p.dest||p.dest==='mob')return '';const f=fosByNum(+p.dest);if(!f)return '';const plan=plannedFor(f);
-  const ts=[...new Set(p.load.filter(it=>it.k==='kit').map(it=>it.t))];if(!ts.length)return '';
+  const ts=[...new Set(p.load.filter(it=>it.k==='kit'&&it.fos===f.num).map(it=>it.t))];if(!ts.length)return '';
   {const c=planCheck(a),rej=caocMog();if(!c.ok||rej[a.id])return `<div class="small"><b>This load covers:</b> ${ts.map(t=>`Task ${t}`).join(', ')} <span style="color:var(--bad)">(not counted until this flight is legal)</span></div>`}
-  return `<div class="small"><b>This load covers:</b> ${ts.map(t=>{const r=reqStatus(f,t,plan);const mine=p.load.filter(it=>it.k==='kit'&&it.t===t).map(it=>it.p==='team'?'team':'equipment').join(' + ');
+  return `<div class="small"><b>This load covers:</b> ${ts.map(t=>{const r=reqStatus(f,t,plan);const mine=p.load.filter(it=>it.k==='kit'&&it.t===t&&it.fos===f.num).map(it=>it.p==='team'?'team':'equipment').join(' + ');
     return `Task ${t} ${mine} <span style="color:var(--${r.cls==='bad'?'bad':r.cls==='warn'?'warn':'ok'})">(${esc(r.st.toLowerCase())})</span>`}).join(' · ')}</div>`}
+function loadPick(a,fn,opts,noStock){const p=a.plan;fn=+fn;const same=(it,o)=>it.k===o.k&&it.t===o.t&&it.x===o.x&&it.p===o.p;
+  const all=G.aircraft.flatMap(b=>(b.plan?.load||[]).map(it=>({b,it})));
+  return `<div class="loadlist">${opts.map(o=>{const on=(p.load||[]).some(it=>same(it,o)&&it.fos===fn);const s=itemSize(o);const elsewhere=all.some(({b,it})=>b!==a&&same(it,o)&&it.fos===fn);
+    const left=o.avail-all.filter(({b,it})=>same(it,o)&&!(b===a&&it.fos===fn)).length;
+    return `<label><input type="checkbox" data-load="${a.id}|${o.k}|${o.t??o.x}|${o.p||''}|${fn}" ${on?'checked':''} ${(!on&&(left<=0||elsewhere))?'disabled':''}><span>${o.k==='kit'?`Task ${o.t} ${esc(TASKS[o.t].n)} ${o.p==='team'?'team':'equipment'}`:esc(EXTRAS[o.x].n)}<br><span class="muted">${s.pax} PAX · ${s.pp} PP · ${elsewhere?'on another aircraft':left+' at MOB'}</span></span></label>`}).join('')||'<span class="muted small">No kits left to send to this FOS.</span>'}</div>
+  ${noStock?'':`<div class="row small">${Object.keys(STOCK).map(s=>{const it=(p.load||[]).find(x=>x.k==='stock'&&x.s===s&&x.fos===fn);return `<label class="row" style="gap:4px">${STOCK[s].n} <input type="number" min="0" max="${G.stock[s]}" value="${it?it.n:0}" data-stock="${a.id}|${s}|${fn}" aria-label="${STOCK[s].n} tokens for FOS ${fn}"> <span class="muted">/${G.stock[s]}</span></label>`}).join('')}</div>`}`}
 function atoPanel(){
   const mc=mogCheck(),rej=caocMog();
-  let h=`<div class="stack"><p class="help">Plan each allocated aircraft. Cargo loads only at the MOB. Ranges: C-130 <b>3</b> hexes, C-17 <b>4</b>. Beyond range (up to 2×) the aircraft ends the turn <b>en route</b> and must land next turn. <b>Download &amp; return</b> needs distance + 1 + distance within range. Pallets need a forklift at the FOS unless the same flight brings Task 10 or Bed Down equipment. A Ramp RFI of 1 means one C-130 at a time. CAOC rejects lines that break MOG. In conflict, a route through a hex with known PLA forces needs a fighter escort into that hex (Fighters tab). If a runway is non-operational, a C-17 or C-130 can airdrop the Base Recovery team with a risk token (d10: 1 lost, 2-4 damaged 1 turn).</p>`;
+  let h=`<div class="stack"><p class="help">Plan each allocated aircraft. Cargo loads only at the MOB. Ranges: C-130 <b>3</b> hexes, C-17 <b>4</b>. Beyond range (up to 2×) the aircraft ends the turn <b>en route</b> and must land next turn. <b>Download &amp; return</b> needs distance + 1 + distance within range. Pallets need a forklift at the FOS unless the same flight brings Task 10 or Bed Down equipment. A Ramp RFI of 1 means one C-130 at a time. CAOC rejects lines that break MOG. In conflict, a route through a hex with known PLA forces needs a fighter escort into that hex (Fighters tab). A flight from the MOB can make <b>two stops</b>: pick an en route FOS, load cargo for both, and the download there costs 1 hex (distance + 1 + distance within range). If a runway is non-operational, a C-17 or C-130 can airdrop the Base Recovery team with a risk token (d10: 1 lost, 2-4 damaged 1 turn).</p>`;
   if(G.fos.length)h+=`<div class="tbl"><table><thead><tr><th>Station workload</th><th>MOG</th><th>On ramp at end</th><th>PPRs</th><th>Room left to land and stay</th></tr></thead><tbody>${G.fos.map(f=>{const m=mc[f.num];const left=Math.max(0,m.M.u-m.ground),pl=Math.max(0,2*m.M.u-m.ppr),room=Math.min(left,pl);const n=t=>Math.floor((room+1e-9)/AC[t].u);
     const fit=['C-130','C-17','C-5'].filter(t=>n(t)>0&&!(t==='C-5'&&FOS_COLOR[f.num]==='red')).map(t=>`${n(t)} ${t}`);
     return `<tr><td>FOS ${f.num}</td><td>${m.M.l}</td><td class="mono" style="color:${m.ground>m.M.u?'var(--bad)':'inherit'}">${fmt(m.ground)} / ${fmt(m.M.u)}</td><td class="mono" style="color:${m.ppr>2*m.M.u?'var(--bad)':'inherit'}">${fmt(m.ppr)} / ${fmt(2*m.M.u)}</td><td class="small">${fit.length?fit.join(' or '):'full'}</td></tr>`}).join('')}</tbody></table></div><p class="small muted">Ramp units: C-130 = 1, C-17 = 1.5, C-5 = 3 (2 C-17 = 3 C-130 = 1 C-5). At the end of the turn the aircraft on the ground must fit the MOG. PPRs (every landing, including download-and-return) can reach 2× MOG. A MOG of 2 C-17 can take 2 C-17, 3 C-130 or 1 C-5 staying, and PPRs for up to 4 C-17, 6 C-130 or 2 C-5. An aircraft bigger than the whole MOG can't use the field.</p>`;
@@ -1335,8 +1391,9 @@ function atoPanel(){
     if(a.type==='C-5')h+=`<div class="small muted">Strategic airlift. Flies to the MOB freely. Every landing or takeoff at a FOS uses a <b>risk token</b> (${G.riskTok||0} left this block) and a ${C5_ROLL}. Red fields are closed to C-5s. MOG: a C-5 takes the ramp space of 2 C-17s.</div>`;
     h+=`<div class="row"><select data-dest="${a.id}" aria-label="Destination for ${esc(a.cs)}"><option value="">Hold this turn</option>${dests.map(([v,l])=>`<option value="${v}" ${String(p.dest)===v?'selected':''}>${esc(l)}</option>`).join('')}</select>
       ${p.dest&&p.dest!=='mob'&&a.loc.k!=='air'?(fosByNum(+p.dest)&&fosByNum(+p.dest).runway>=3&&a.type!=='C-5'&&a.loc.k==='mob'?`<select data-intent="${a.id}" aria-label="Intent"><option value="airdrop" selected>Airdrop repair team (risk token)</option></select>`:`<select data-intent="${a.id}" aria-label="Intent">${!room[+p.dest]||room[+p.dest].land||p.intent!=='return'?`<option value="land" ${p.intent!=='return'?'selected':''}>Land and stay${room[+p.dest]&&!room[+p.dest].land?' (over MOG)':''}</option>`:''}<option value="return" ${p.intent==='return'?'selected':''}>Download and return</option></select>`):''}
+      ${a.loc.k==='mob'&&p.dest&&p.dest!=='mob'&&p.intent==='land'&&!farMob()&&G.fos.length>1?`<select data-via="${a.id}" aria-label="En route stop for ${esc(a.cs)}"><option value="">No en route stop</option>${G.fos.filter(f=>String(f.num)!==String(p.dest)).map(f=>`<option value="${f.num}" ${String(p.via)===String(f.num)?'selected':''}>Stop first at FOS ${f.num} · ${hexDist(locHex(a),fosHex(f))} + 1 + ${hexDist(fosHex(f),destHex(p.dest))} hexes</option>`).join('')}</select>`:''}
       ${hidden.length?`<span class="small muted">Hidden, MOG full: FOS ${hidden.join(', ')}</span>`:''}
-      ${c.hold?'':c.ok?`<span class="pill ok">${c.intent==='enroute'?'En route: lands next turn':c.intent==='return'?'Round trip OK':c.intent==='airdrop'?'Airdrop OK: d10 risk roll':'OK'}</span>`:''}</div>`;
+      ${c.hold?'':c.ok?`<span class="pill ok">${c.intent==='transit'?'Transit to the AOR entry: flies on next turn':p.via?'Two stops OK':c.intent==='enroute'?'En route: lands next turn':c.intent==='return'?'Round trip OK':c.intent==='airdrop'?'Airdrop OK: d10 risk roll':'OK'}</span>`:''}</div>`;
     if(!c.ok)h+=`<div class="small" style="color:var(--bad)">${c.msgs.map(esc).join('<br>')}</div>`;
     if(a.loc.k==='mob'&&p.dest&&p.dest!=='mob'){
       const opts=availableLoads(p.dest).filter(o=>p.intent!=='airdrop'||(o.k==='kit'&&o.t===15));const f=fosByNum(+p.dest);
@@ -1344,10 +1401,8 @@ function atoPanel(){
       <div class="row small" style="gap:4px"><span class="muted">${a.type} max loads:</span>${AC[a.type].cfg.map(c=>{const fits=tot.pp<=c.pp&&tot.pax<=c.pax;return `<span class="pill ${cfg&&cfg.n===c.n?'ok':fits?'':'bad'}" title="${fits?'This load fits':'This load does not fit'}">${c.n} ${c.pp} PP + ${c.pax} PAX${fits?'':` · ${overBy(c,tot).txt}`}</span>`}).join('')}</div>
       <div class="row small"><span>PP</span><div class="meter"><i class="${tot.pp>maxPP?'over':''}" style="width:${Math.min(100,tot.pp/maxPP*100)}%"></i></div><span>PAX</span><div class="meter"><i class="${tot.pax>maxPax?'over':''}" style="width:${Math.min(100,tot.pax/maxPax*100)}%"></i></div></div>
       ${loadCovers(a)}
-      <div class="loadlist">${opts.map(o=>{const same=(it,o)=>it.k===o.k&&it.t===o.t&&it.x===o.x&&it.p===o.p;const on=(p.load||[]).some(it=>same(it,o));const s=itemSize(o);const elsewhere=G.aircraft.some(b=>b!==a&&(b.plan?.load||[]).some(it=>same(it,o)&&it.fos===o.fos));
-        const left=o.avail-G.aircraft.filter(b=>b!==a).reduce((n,b)=>n+(b.plan?.load||[]).filter(it=>same(it,o)).length,0);
-        return `<label><input type="checkbox" data-load="${a.id}|${o.k}|${o.t??o.x}|${o.p||''}" ${on?'checked':''} ${(!on&&(left<=0||elsewhere))?'disabled':''}><span>${o.k==='kit'?`Task ${o.t} ${esc(TASKS[o.t].n)} ${o.p==='team'?'team':'equipment'}`:esc(EXTRAS[o.x].n)}<br><span class="muted">${s.pax} PAX · ${s.pp} PP · ${elsewhere?'on another aircraft':left+' at MOB'}</span></span></label>`}).join('')||'<span class="muted small">No kits left to send to this FOS.</span>'}</div>
-      ${p.intent==='airdrop'?'':`<div class="row small">`}${p.intent==='airdrop'?'':Object.keys(STOCK).map(s=>{const it=(p.load||[]).find(x=>x.k==='stock'&&x.s===s);return `<label class="row" style="gap:4px">${STOCK[s].n} <input type="number" min="0" max="${G.stock[s]}" value="${it?it.n:0}" data-stock="${a.id}|${s}" aria-label="${STOCK[s].n} tokens"> <span class="muted">/${G.stock[s]}</span></label>`}).join('')+'</div>'}`;
+      ${loadPick(a,p.dest,opts,p.intent==='airdrop')}
+      ${p.via?`<div class="small"><b>Download en route at FOS ${p.via}</b> <span class="muted">· counts toward this aircraft's load totals above</span></div>${loadPick(a,p.via,availableLoads(p.via),false)}`:''}`;
     }
     h+='</div>';
   });
@@ -1380,6 +1435,8 @@ function mobPanel(){
   const M=MOBS[G.mob];UI.tc=UI.tc||{};
   const canTC=G.turn>=G.tcNext;
   let h=`<div class="stack"><p class="help"><b>${esc(M.n)}</b> (hex ${M.hex}). ${esc(M.note)}</p>
+  ${mobRw()?`<p class="small" style="color:var(--bad)"><b>Runway damaged this turn:</b> ${MOB_RW[mobRw()]}.</p>`:''}
+  ${G.forecast?`<p class="small"><b>TRANSCOM forecast for the next block:</b> ${G.forecast}. Call signs: MOOSE (C-17), ARROW (C-130), BOSCO (C-5), REACH (TRANSCOM C-5).</p>`:''}
   <div class="tbl"><table><thead><tr><th>Commodity</th><th>At MOB</th></tr></thead><tbody>${Object.keys(STOCK).map(s=>`<tr><td>${STOCK[s].n} <span class="muted">(${STOCK[s].pp} PP each)</span></td><td class="mono">${G.stock[s]}</td></tr>`).join('')}</tbody></table></div>
   <div class="tbl"><table><thead><tr><th>Task kit at MOB</th><th>Base size</th><th>Teams / Equip</th></tr></thead><tbody>${Object.keys(TASKS).map(t=>`<tr><td>Task ${t} ${esc(TASKS[t].n)}</td><td class="mono">${TASKS[t].pax}p / ${TASKS[t].pp}PP</td><td class="mono" style="color:${(G.kits[t]||0)===0||(G.equip[t]||0)===0?'var(--bad)':'inherit'}">${G.kits[t]||0} / ${G.equip[t]||0}</td></tr>`).join('')}${Object.keys(EXTRAS).map(x=>`<tr><td>${EXTRAS[x].n}</td><td class="mono">${EXTRAS[x].pax}p / ${EXTRAS[x].pp}PP</td><td class="mono">${G.kits[x]||0}</td></tr>`).join('')}</tbody></table></div>
   <div class="row small">Host nation chits (3 RP from Task 13): <select id="rppick" aria-label="Resource chit">${['food','water','fuel'].map(k=>`<option value="${k}" ${(G.rpPick||'')===k?'selected':''}>${k}</option>`).join('')}<option value="" ${G.rpPick?'':'selected'}>whichever of food or water is lower</option></select> <span class="muted">${G.rp} RP banked</span></div>
@@ -1420,7 +1477,7 @@ function helpModal(){return `<div class="overlay" id="ov"><div class="modal" rol
     <li><b>MOB &amp; TRANSCOM:</b> ask CONUS for kits you're short of. Two C-5s every other turn.</li>
     <li>Press <b>Execute turn</b>. A day is 4 turns and turns 3–4 are night. Every 2 turns is one OPS block: each new block brings sealift, a new aircraft allocation and fresh risk tokens. Each day ends with logistics tax (taxed food and water go back to the MOB), DP checks and new access rolls. If a country revokes access, you get 2 turns to fly aircraft out before anything left there is trapped.</li>
   </ol>
-  <p class="help">Days 1–2 are crisis (EXORD). On day 3 the FRAGORD arrives: op areas move, PLA targets appear, and missiles start hitting your FOS. Missile Defense, Hardening and Base Recovery matter then. Strikes hit the runway or the parking ramp, and damage adds up until Base Recovery repairs it. A fourth strike in a row destroys a FOS unless it has both Base Recovery and Hardening. Base Recovery (Task 15) also builds the ramp up to 2 C-17 + 7 fighters one turn after the team is in place. Hardening (Task 8) takes 2 turns. You lose 1 MP for every 5 DP, and DP come from late bed down, no Health &amp; Welfare, and running out of food or water.</p>
+  <p class="help">Days 1–2 are crisis (EXORD). On day 3 the FRAGORD arrives: op areas move, PLA targets appear, and missiles start hitting your FOS. Missile Defense (+5 to the defense roll), Hardening (+2) and Base Recovery matter then. A FOS gets easier to find the longer people sit on it (detection d10 beats 7, minus 0.5 per turn on site). Strikes hit the runway or the parking ramp, and the MOB runway can be hit too (closed or limited to smaller aircraft for that turn), and damage adds up until Base Recovery repairs it. A fourth strike in a row destroys a FOS unless it has both Base Recovery and Hardening. Base Recovery (Task 15) also builds the ramp up to 2 C-17 + 7 fighters one turn after the team is in place. Hardening (Task 8) takes 2 turns. You lose 1 MP for every 5 DP, and DP come from late bed down, no Health &amp; Welfare, and running out of food or water.</p>
   <p class="help">Simplifications: each task's team and equipment set stand in for the personnel and equipment tokens, a forklift arrives with Task 10 or Bed Down, the PLA rolls d20 against your d10 + defenses, the space-board positions over the OPS map are estimated from a photo of the board, and the other MOBs and MEDCOM aren't played. All the numbers come from your OPS guide and boards.</p>
   <div class="row"><button class="btn primary" id="closehelp">Got it</button></div></div></div>`}
 function overModal(){const net=mpNet(),tgt=LENGTHS[G.len].target;return `<div class="overlay" id="ov2"><div class="modal" role="dialog" aria-label="Campaign result">
@@ -1556,12 +1613,13 @@ function bind(){
   document.querySelectorAll('[data-contract]').forEach(b=>b.onclick=()=>{const [n,t]=b.dataset.contract.split('|').map(Number);fosByNum(n).contractQ=t;save();render()});
   document.querySelectorAll('details[data-req]').forEach(d=>d.ontoggle=()=>{UI.reqOpen=UI.reqOpen||{};UI.reqOpen[d.dataset.req]=d.open});
   document.querySelectorAll('[data-dest]').forEach(s=>s.onchange=()=>{const a=G.aircraft.find(x=>x.id==s.dataset.dest);a.plan=s.value?{dest:s.value,intent:'land',load:[]}:null;if(a.plan&&s.value!=='mob'){const f=fosByNum(+s.value);if(f){const r=fosRoom(a,f);if(f.runway>=3&&a.type!=='C-5'&&a.loc.k==='mob')a.plan.intent='airdrop';else if(!r.land&&r.ret)a.plan.intent='return'}}save();render()});
-  document.querySelectorAll('[data-intent]').forEach(s=>s.onchange=()=>{const a=G.aircraft.find(x=>x.id==s.dataset.intent);a.plan.intent=s.value;save();render()});
-  document.querySelectorAll('[data-load]').forEach(cb=>cb.onchange=()=>{const [id,k,t,pt]=cb.dataset.load.split('|');const a=G.aircraft.find(x=>x.id==id);const it=k==='kit'?{k,t:+t,p:pt,fos:+a.plan.dest}:{k,x:t,fos:+a.plan.dest};
-    if(cb.checked)a.plan.load.push(it);else a.plan.load=a.plan.load.filter(x=>!(x.k===it.k&&x.t===it.t&&x.x===it.x&&x.p===it.p));save();render()});
-  document.querySelectorAll('[data-stock]').forEach(inp=>inp.onchange=()=>{const [id,s]=inp.dataset.stock.split('|');const a=G.aircraft.find(x=>x.id==id);
-    const used=G.aircraft.filter(b=>b!==a).reduce((n,b)=>n+((b.plan?.load||[]).find(x=>x.k==='stock'&&x.s===s)?.n||0),0);
-    const n=Math.max(0,Math.min(G.stock[s]-used,parseInt(inp.value)||0));a.plan.load=a.plan.load.filter(x=>!(x.k==='stock'&&x.s===s));if(n)a.plan.load.push({k:'stock',s,n,fos:+a.plan.dest});save();render()});
+  document.querySelectorAll('[data-intent]').forEach(s=>s.onchange=()=>{const a=G.aircraft.find(x=>x.id==s.dataset.intent);a.plan.intent=s.value;if(s.value!=='land'){delete a.plan.via;a.plan.load=a.plan.load.filter(it=>it.fos===+a.plan.dest)}save();render()});
+  document.querySelectorAll('[data-via]').forEach(s=>s.onchange=()=>{const a=G.aircraft.find(x=>x.id==s.dataset.via);if(s.value)a.plan.via=s.value;else delete a.plan.via;a.plan.load=a.plan.load.filter(it=>it.fos===+a.plan.dest||(a.plan.via&&it.fos===+a.plan.via));save();render()});
+  document.querySelectorAll('[data-load]').forEach(cb=>cb.onchange=()=>{const [id,k,t,pt,fn]=cb.dataset.load.split('|');const a=G.aircraft.find(x=>x.id==id);const fos=+fn||+a.plan.dest;const it=k==='kit'?{k,t:+t,p:pt,fos}:{k,x:t,fos};
+    if(cb.checked)a.plan.load.push(it);else a.plan.load=a.plan.load.filter(x=>!(x.k===it.k&&x.t===it.t&&x.x===it.x&&x.p===it.p&&x.fos===fos));save();render()});
+  document.querySelectorAll('[data-stock]').forEach(inp=>inp.onchange=()=>{const [id,s,fn]=inp.dataset.stock.split('|');const a=G.aircraft.find(x=>x.id==id);const fos=+fn||+a.plan.dest;
+    const used=G.aircraft.reduce((n,b)=>n+(b.plan?.load||[]).filter(x=>x.k==='stock'&&x.s===s&&!(b===a&&x.fos===fos)).reduce((m,x)=>m+x.n,0),0);
+    const n=Math.max(0,Math.min(G.stock[s]-used,parseInt(inp.value)||0));a.plan.load=a.plan.load.filter(x=>!(x.k==='stock'&&x.s===s&&x.fos===fos));if(n)a.plan.load.push({k:'stock',s,n,fos});save();render()});
   document.querySelectorAll('[data-move]').forEach(b=>b.onclick=()=>{const n=+b.dataset.move;const v=Math.max(1,parseInt($('#mv-'+n).value)||1);const max=+$('#mv-'+n).max;if(max<1)return;UI.pendingMoves.push({to:n,n:Math.min(v,max)});render()});
   document.querySelectorAll('[data-unmove]').forEach(b=>b.onclick=()=>{UI.pendingMoves.splice(+b.dataset.unmove,1);render()});
   document.querySelectorAll('[data-sortie]').forEach(b=>b.onclick=()=>{const n=+b.dataset.sortie;const f=fosByNum(n);const planned=UI.sorties.filter(s=>s.fos===n).reduce((x,s)=>x+s.n,0);
