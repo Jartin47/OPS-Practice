@@ -982,8 +982,9 @@ function evacCheck(a){const mis=a.mis,out=[];if(!mis||mis.k!=='evac')return out;
   return out}
 /* ---------- execution ---------- */
 function medResolve(){const M=G.med;const used={band:0,pharm:0,iv:0,oxy:0};
+  const loads={};M.fleet.forEach(a=>{if(!a.busy&&a.mis&&a.mis.k==='cargo'&&a.mis.to)loads[a.id]=medLoad(a)}); // plan every load before any lands
   M.fleet.forEach(a=>{if(a.busy){a.busy--;a.mis=null;return}const mis=a.mis;if(!mis)return;
-    if(mis.k==='cargo'){if(!mis.to)return;const ld=medLoad(a);if(!ld.pp&&!ld.pax){log('acc',`${a.cs} (${a.type}) has nothing to carry to ${MOBS[mis.to].n} and stays at JBPHH.`);return}
+    if(mis.k==='cargo'){if(!mis.to)return;const ld=loads[a.id];if(!ld.pp&&!ld.pax){log('acc',`${a.cs} (${a.type}) has nothing to carry to ${MOBS[mis.to].n} and stays at JBPHH.`);return}
       const h=H(mis.to);ld.items.forEach(it=>{if(it.t==='helo'){h.heloGot+=it.pp;if(h.heloGot>=8){h.helo=true;h.heloLost=false;h.heloGot=0;log('ok',`A replacement HH-60 reaches ${MOBS[mis.to].n}.`)}return}
         const g=h.got[it.t]||(h.got[it.t]={pax:0,pp:0});g.pax+=it.pax;g.pp+=it.pp});
       a.busy=1;log('ok',`${a.cs} (${a.type}, ${ld.cfg.n}) flies JBPHH to ${MOBS[mis.to].n}: ${ld.pp} PP + ${ld.pax} PAX for ${ld.items.filter(i=>i.pp||i.pax).map(i=>i.t==='helo'?'HH-60':`Task ${i.t}`).join(', ')}. It needs the next turn to fly back.`)}
