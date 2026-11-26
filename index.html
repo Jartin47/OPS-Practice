@@ -586,9 +586,9 @@ function jamAgainst(hex){let jam=0;const notes=[];
   return {jam,notes}}
 
 /* =================== THEATER ROLES: CAOC and CSpOC (the 4 MOBs are computer-run) =================== */
-const ROLES={mob:{n:'MOB commander',d:'Run one AEW: pick and build FOS, plan your own airlift, fly your fighters, and run space support for your area.'},
-  caoc:{n:'CAOC (CFACC)',d:'Apportion airlift to the four MOBs, then approve or reject every airlift and fighter line on the ATO. MOG, PPR, range, loads and targeting are on you.'},
-  cspoc:{n:'CSpOC (CFSCC)',d:'Run the satellites for the whole theater. Find PLA targets for the four MOBs, answer CFACC intel requests, and protect your constellation.'}};
+const ROLES={caoc:{n:'CAOC (CFACC)',d:'Apportion airlift to the four MOBs, then approve or reject every airlift and fighter line on the ATO. MOG, PPR, range, loads and targeting are on you.'},
+  cspoc:{n:'CSpOC (CFSCC)',d:'Run the satellites for the whole theater. Find PLA targets for the four MOBs, answer CFACC intel requests, and protect your constellation.'},
+  mob:{n:'MOB commander',d:'Run one AEW: pick and build FOS, plan your own airlift, fly your fighters, and run space support for your area.'}};
 const THEATER_TARGET={caoc:{short:160,standard:450,long:750},cspoc:{short:30,standard:60,long:80}};
 const AI_FOS={Kadena:[6,8],Andersen:[7,10],Yokota:[1,4],Osan:[2,5]};
 const MOB_COLOR={Kadena:'#e0218a',Andersen:'#9b5cff',Yokota:'#19b37a',Osan:'#ff8a1f'};
