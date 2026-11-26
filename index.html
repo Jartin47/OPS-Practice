@@ -193,13 +193,13 @@ const FRAGORDS={
   barrage:{n:'Missile barrage',d:'For the first conflict day the PLA finds your FOS more easily. Missile Defense, Hardening and missile warning matter.'},
   allies:{n:'Coalition support',d:'Allied tankers deliver +6 fuel to your MOB, and the CSpOC gets an extra cyber package.'},
   cyberwar:{n:'PLA cyber offensive',d:'Every conflict turn the PLA jams voice comms in one GEO zone. Keep COMM satellites over both zones.'}};
-function opAreas(){return phase()==='conflict'&&G.opShift?G.opShift:OP_AREAS[G.mob][phase()]}
-function applyFragord(){const k=pick(Object.keys(FRAGORDS));G.frag=k;log('bad',`FRAGORD condition: ${FRAGORDS[k].n}. ${FRAGORDS[k].d}`);
+function opAreas(){if(isTheater())return theaterAreas();return phase()==='conflict'&&G.opShift?G.opShift:OP_AREAS[G.mob][phase()]}
+function applyFragord(){const k=pick(Object.keys(FRAGORDS).filter(x=>!(isTheater()&&x==='shift')));G.frag=k;log('bad',`FRAGORD condition: ${FRAGORDS[k].n}. ${FRAGORDS[k].d}`);
   if(k==='shift'){const list=OP_AREAS[G.mob].conflict.slice();const i=d(list.length)-1,h=list[i];
     const opts=ZONE_HEXES[1].concat(ZONE_HEXES[2]).filter(x=>hexDist(x,h)===1&&!list.includes(x));if(opts.length){const n=pick(opts);list[i]=n;G.opShift=list;
       const mv=(G.pla[h]||[]).filter(t=>t.s!=='sj');G.pla[n]=(G.pla[n]||[]).concat(mv);G.pla[h]=(G.pla[h]||[]).filter(t=>t.s==='sj');log('bad',`Op area hex ${hexLabel(h)} moves to hex ${hexLabel(n)}. Your op areas are now ${list.map(hexLabel).join(', ')}.`)}}
-  if(k==='surge'){const hs=OP_AREAS[G.mob].conflict.slice().sort(()=>Math.random()-.5).slice(0,2);hs.forEach(h=>(G.pla[h]=G.pla[h]||[]).push({s:20,id:0}))}
-  if(k==='allies'){G.stock.fuel+=6;G.space.cyber++}
+  if(k==='surge'){const hs=(isTheater()?theaterAreas('conflict'):OP_AREAS[G.mob].conflict).slice().sort(()=>Math.random()-.5).slice(0,2);hs.forEach(h=>(G.pla[h]=G.pla[h]||[]).push({s:20,id:0}))}
+  if(k==='allies'){G.stock.fuel+=6;G.space.cyber++;if(isTheater())Object.values(G.ai).forEach(a=>a.fos.forEach(f=>f.fuel+=3))}
 }
 const day=()=>Math.ceil(G.turn/turnsPerDay);
 const isNight=()=>((G.turn-1)%turnsPerDay)>=2;
@@ -333,6 +333,7 @@ function caocMog(){ // first-come MOG verdicts in ATO order, same as execution
   return rej;
 }
 function executeTurn(){
+  if(isTheater())return executeTheaterTurn();
   if(G.over)return;
   const report=[];log('h',`Execution · Day ${day()} Turn ${G.turn}${isNight()?' (night)':''}`);
   // 1. CAOC verifies ATO
@@ -474,7 +475,7 @@ function flySorties(s){
     else log(inArea?'ok':'bad',inArea?`${ft} flies hex ${hexLabel(s.hex)}: +5 MP. No identified targets to strike there${toks.some(t=>t.id<2)?' (ask the CSpOC for a look)':''}.`:`Hex ${hexLabel(s.hex)} isn't a FRAGORD op area. No MP.`);
   }
 }
-function endGame(){G.over=true;const net=mpNet(),tgt=LENGTHS[G.len].target;
+function endGame(){G.over=true;const net=mpNet(),tgt=goal();
   log('h','Campaign complete');log(net>=tgt?'ok':'bad',`Final: ${G.mp} MP − ${Math.floor(G.dp/5)} (from ${G.dp} DP) = ${net} net MP. Victory condition ${tgt}. ${net>=tgt?'CJTF Agile Dragon prevails.':'The PLA holds. Debrief and try again.'}`)}
 
 /* =================== CSpOC (space board, guide ch. 6) =================== */
@@ -530,7 +531,7 @@ function seedSpace(){
   INITIAL_SATS.forEach(([t,o,p])=>{let pp=p;while(occupied(o,pp))pp=wrapPos(o,pp+1);addSat(t,o,pp)});
 }
 function seedPLA(){
-  G.pla={};const hexes=[...new Set(OP_AREAS[G.mob].conflict)];
+  G.pla={};const hexes=[...new Set(isTheater()?theaterAreas('conflict'):OP_AREAS[G.mob].conflict)];
   hexes.forEach(h=>{const n=d(2);G.pla[h]=[];for(let i=0;i<n;i++)G.pla[h].push({s:pick([10,10,12,12,20]),id:0})});
   const aj=pick(hexes);G.pla[aj].push({s:'aj',id:0});
   const near=ZONE_HEXES[1].concat(ZONE_HEXES[2]).filter(h=>hexes.some(x=>hexDist(x,h)<=2)&&!Object.values(FOS_HEX).includes(h));
@@ -539,25 +540,26 @@ function seedPLA(){
 function spaceLook(s,hex){
   const S=G.space;s.acted=G.turn;const out=[];
   if(s.orbit==='L'&&S.solar===G.turn){log('bad',`${s.code}: the solar storm blinds LEO sensors. Look failed.`);return}
-  if(s.type==='SDA'){const found=S.prc.filter(p=>p.alive&&!p.known&&p.orbit===s.orbit&&circDist(s.orbit,p.pos,s.pos)<=2);found.forEach(p=>p.known=true);
+  if(s.type==='SDA'){const found=S.prc.filter(p=>p.alive&&!p.known&&p.orbit===s.orbit&&circDist(s.orbit,p.pos,s.pos)<=2);found.forEach(p=>p.known=true);if(G.role==='cspoc')G.mp+=2*found.length;
     out.push(found.length?`identifies ${found.map(p=>`${PRC_KIND[p.kind]} at ${posName(p.orbit,p.pos)}`).join(', ')}`:`finds no unknown objects near ${posName(s.orbit,s.pos)}`)}
   if(hex!=null){
     const sees=SAT_TYPES[s.type].sees,full=s.orbit==='L'||(s.orbit[0]==='M'&&gbrZones().has(zoneOfHex(hex)));const got=[];
     (G.pla[hex]||[]).forEach(t=>{if(!sees.includes(t.s)||t.id===2)return;
-      if(full||(s.type==='MW'&&t.s===10)||(s.type==='SDA'&&t.s==='sj'))t.id=2;else t.id++;
-      if(t.id===2)S.ident++;got.push(t.id===2?`identifies a ${TOKEN_NAME(t)}`:`detects an unidentified contact (look again to identify)`)});
+      if(full||(s.type==='MW'&&t.s===10)||(s.type==='SDA'&&t.s==='sj'))t.id=2;else t.id++;if(t.id===2)t.sp=true;
+      if(t.id===2){S.ident++;if(G.role==='cspoc')G.mp+=2}got.push(t.id===2?`identifies a ${TOKEN_NAME(t)}`:`detects an unidentified contact (look again to identify)`)});
     out.push(`hex ${hexLabel(hex)}: ${got.length?got.join(', '):'nothing new it can see'}`);
+    if(G.ccir&&G.ccir.t===G.turn&&!G.ccir.done&&G.ccir.hex===hex){G.ccir.done=true;G.mp+=3;G.acc.ccir++;out.push('CCIR answered (+3 MP)')}
   }
   log(out.some(x=>/identif|detects/.test(x)&&!/no unknown|nothing new/.test(x))?'ok':'acc',`${s.code} (${ORBITS[s.orbit].n}) ${out.join('; ')}.`);
 }
 function owRoll(attacker,targetName,isDual,onKill){
   const S=G.space;attacker.acted=G.turn;
   if(isDual){const a=d(20),b=d(20);
-    if(a>b){onKill();log('ok',`${attacker.code} (d20: ${a}) destroys the ${targetName} (d20: ${b}).`)}
+    if(a>b){onKill();if(G.role==='cspoc')G.mp+=5;log('ok',`${attacker.code} (d20: ${a}) destroys the ${targetName} (d20: ${b}).`)}
     else if(b>a){attacker.alive=false;S.lost++;log('bad',`${attacker.code} (d20: ${a}) loses to the ${targetName} (d20: ${b}) and is destroyed.`)}
     else log('acc',`${attacker.code} and the ${targetName} tie (${a}). No effect.`);return}
   const r=d(10);
-  if(r<=3){onKill();log('ok',`${attacker.code} rolls ${r}: the ${targetName} is destroyed.`)}
+  if(r<=3){onKill();if(G.role==='cspoc')G.mp+=5;log('ok',`${attacker.code} rolls ${r}: the ${targetName} is destroyed.`)}
   else if(r<=7)log('acc',`${attacker.code} rolls ${r}: the attack fails.`);
   else{onKill();attacker.alive=false;S.lost++;log('bad',`${attacker.code} rolls ${r}: total loss of both. Debris takes out ${attacker.code} and the ${targetName}.`)}
 }
@@ -583,11 +585,316 @@ function jamAgainst(hex){let jam=0;const notes=[];
     if(t.s==='aj'&&dd<=1&&d(10)>=4){jam+=2;notes.push('airborne jammer +2 PLA')}}));
   return {jam,notes}}
 
+/* =================== THEATER ROLES: CAOC and CSpOC (the 4 MOBs are computer-run) =================== */
+const ROLES={mob:{n:'MOB commander',d:'Run one AEW: pick and build FOS, plan your own airlift, fly your fighters, and run space support for your area.'},
+  caoc:{n:'CAOC (CFACC)',d:'Apportion airlift to the four MOBs, then approve or reject every airlift and fighter line on the ATO. MOG, PPR, range, loads and targeting are on you.'},
+  cspoc:{n:'CSpOC (CFSCC)',d:'Run the satellites for the whole theater. Find PLA targets for the four MOBs, answer CFACC intel requests, and protect your constellation.'}};
+const THEATER_TARGET={caoc:{short:160,standard:450,long:750},cspoc:{short:30,standard:60,long:80}};
+const AI_FOS={Kadena:[6,8],Andersen:[7,10],Yokota:[1,4],Osan:[2,5]};
+const MOB_COLOR={Kadena:'#e0218a',Andersen:'#9b5cff',Yokota:'#19b37a',Osan:'#ff8a1f'};
+const isTheater=()=>G&&G.role&&G.role!=='mob';
+const goal=()=>isTheater()?THEATER_TARGET[G.role][G.len]:LENGTHS[G.len].target;
+function theaterAreas(ph){const out=new Set();Object.keys(MOBS).forEach(m=>OP_AREAS[m][ph||phase()].forEach(h=>out.add(h)));return [...out]}
+const rampU=r=>r>=3?9:r===2?3:1;
+const rampF=r=>r>=3?12:r===2?7:2;
+const rampL=r=>r>=3?'6 C-17 + 42 ftr':r===2?'2 C-17 + 7 ftr':'1 C-130 + 2 ftr';
+function aiFos(m,n){return G.ai[m].fos.find(f=>f.num===n)}
+function newTheaterGame(role,len){
+  G={v:3,role,mob:null,len,turn:1,mp:0,dp:0,rp:0,kills:0,sorties:0,assessed:0,over:false,kits:{},equip:{},stock:{fuel:0,food:0,water:0,bomb:0,missile:0},
+    fightersMob:0,moves:[],fos:[],aircraft:[],transcom:[],tcNext:99,pla:{},access:{},log:[],seq:1,acc:{ok:0,bad:0,ccir:0},ai:{},lines:[],flines:[],appo:{}};
+  G.exord=pick(Object.keys(EXORDS));
+  rollAccess(true);seedPLA();seedSpace();
+  if(G.exord==='shadow')for(let i=0;i<4;i++){const S=G.space;let o,p,n=0;do{o=pick(ORBIT_KEYS);p=d(ORBITS[o].len);n++}while(occupied(o,p)&&n<40);S.prc.push({id:S.seq++,kind:pick(['dual','prc','prc','civ']),orbit:o,pos:p,known:false,alive:true,cool:0})}
+  Object.keys(MOBS).forEach(m=>{G.ai[m]={fightersMob:16,lost:0,fos:AI_FOS[m].map(n=>({num:n,hex:FOS_HEX[n],prog:0,ramp:pick([1,1,2,2,3]),fork:d(3)>=2,fuel:0,fighters:0,inbound:0,down:0,rbuild:0}))}});
+  allocPool();
+  log('h','Day 1 · Turn 1 · Crisis');
+  log('bad',`EXORD condition: ${EXORDS[G.exord].n}. ${EXORDS[G.exord].d}`);
+  log('acc',role==='caoc'?`You are the CFACC. Apportion today's ${G.pool.c17} C-17s and ${G.pool.c130} C-130s, then review the ATO. The four MOBs build their FOS with whatever lift you approve.`:
+    'You run the CSpOC. Place your satellites now. They start looking next turn, and the four MOBs strike only what you identify.');
+  if(role==='caoc')genLines();
+  save();
+}
+function allocPool(){G.pool={c17:6+d(4)+(G.exord==='surge'?2:0),c130:6+d(4)};const ms=Object.keys(MOBS);
+  ms.forEach((m,i)=>{G.appo[m]={c17:Math.floor(G.pool.c17/4)+(i<G.pool.c17%4?1:0),c130:Math.floor(G.pool.c130/4)+(i<G.pool.c130%4?1:0)}});
+  ms.forEach(m=>G.ai[m].lost=0)}
+const fosOpen=f=>G.access[fosCountry(f.num)]!==false&&f.prog>=0;
+const stormBlocks=f=>{const st=G.space.storm;return st&&st.t===G.turn&&st.z===zoneOfFos(f.num)&&!covers(st.z,'WX')};
+const jamBlocks=f=>{const cj=G.space.commJam;return cj&&cj.t===G.turn&&cj.z===zoneOfFos(f.num)&&!covers(cj.z,'COMM')};
+/* ---------- CAOC: airlift lines ---------- */
+function genLines(){
+  G.lines=[];let id=1;const plan={};
+  Object.keys(MOBS).forEach(m=>{const A=G.ai[m],M=MOBS[m];const open=A.fos.filter(fosOpen);if(!open.length)return;
+    const fleet=[...Array(Math.max(0,G.appo[m].c17-(A.lostC17||0))).fill('C-17'),...Array(G.appo[m].c130).fill('C-130')];
+    fleet.forEach((type,k)=>{
+      let f=open.slice().sort((a,b)=>a.prog-b.prog)[k%open.length];
+      const u=AC[type].u;const P=plan[f.num]||(plan[f.num]=0);
+      if(P+u>2*rampU(f.ramp)&&Math.random()<.75){const alt=open.find(x=>x!==f&&(plan[x.num]||0)+u<=2*rampU(x.ramp));if(alt)f=alt;else return}
+      plan[f.num]=(plan[f.num]||0)+u;
+      const R=AC[type].range,dist=hexDist(M.hex,f.hex);let intent=2*dist+1<=R?'return':'land';
+      let cfg,pp,pax;const ready=f.prog>=10;
+      if(type==='C-17'){if(ready){cfg='Cargo';pp=12+d(6);pax=0}else{cfg='Mixed';pp=5+d(6);pax=15+d(39)}}
+      else{if(ready||Math.random()<.5){cfg='Cargo';pp=3+d(5);pax=0}else{cfg='Mixed';pp=d(2);pax=10+d(52)}}
+      if(intent==='land'&&type==='C-17'&&f.ramp===1&&Math.random()<.6)intent=2*dist+1<=R?'return':'land';
+      let fork=!f.fork&&pp>0?Math.random()<.85:false;
+      if(Math.random()<.22){const fl=pick(['range','config','config','mog']);
+        if(fl==='range'&&intent==='land')intent='return';
+        else if(fl==='config'){const c=AC[type].cfg.find(c=>c.n===cfg);if(Math.random()<.5)pp=c.pp+d(4);else if(c.pax)pax=c.pax+d(20);else pp=c.pp+d(3)}
+        else if(fl==='mog'&&type==='C-17')intent='land'}
+      G.lines.push({id:id++,mob:m,type,cs:`${type==='C-17'?M.cs[1]:M.cs[0]} ${String(10+id).padStart(2,'0')}`,fos:f.num,dist,intent,cfg,pp,pax,fork,dec:null});
+    })});
+}
+function lineCheck(L,tally){
+  const f=aiFos(L.mob,L.fos),R=AC[L.type].range,v=[];
+  if(L.intent==='return'&&2*L.dist+1>R)v.push({k:'range',t:`download and return needs ${L.dist} + 1 + ${L.dist} = ${2*L.dist+1} hexes, and a ${L.type} flies ${R}`});
+  if(L.intent==='land'&&L.dist>R)v.push({k:'range',t:`FOS ${L.fos} is ${L.dist} hexes out, beyond ${L.type} range (${R})`});
+  const c=AC[L.type].cfg.find(c=>c.n===L.cfg);if(L.pp>c.pp||L.pax>c.pax)v.push({k:'config',t:`${L.pp} PP + ${L.pax} PAX doesn't fit the ${L.type} ${c.n} config (${c.pp} PP + ${c.pax} PAX)`});
+  if(L.pp>0&&!f.fork&&!L.fork)v.push({k:'fork',t:`FOS ${L.fos} has no forklift and this load doesn't bring one, so the pallets can't come off`});
+  if(G.access[fosCountry(f.num)]===false)v.push({k:'access',t:`${fosCountry(f.num)} has denied access`});
+  if(stormBlocks(f))v.push({k:'storm',t:`typhoon over GEO zone ${zoneOfFos(f.num)} with no weather satellite coverage`});
+  const t=tally[L.fos]||{g:0,p:0},u=AC[L.type].u,U=rampU(f.ramp),ng=t.g+(L.intent==='land'?u:0),np=t.p+u;
+  if(ng>U+1e-9)v.push({k:'mog',t:`it would leave ${fmt(ng)} on a ramp with MOG ${U} (${rampL(f.ramp)})`});
+  if(np>2*U+1e-9)v.push({k:'ppr',t:`it would make ${fmt(np)} PPRs against a limit of ${2*U} (2 × MOG)`});
+  return {v,ng,np}}
+function liveTally(){const tally={};G.lines.forEach(L=>{if(L.dec!=='ok')return;const r=lineCheck(L,tally);tally[L.fos]={g:r.ng,p:r.np}});return tally}
+function deliver(m,f,units){
+  if(f.prog<10){f.prog=Math.min(10,f.prog+units);if(f.prog>=3&&!f.fork)f.fork=true;if(f.prog>=10)log('ok',`${MOBS[m].n}: FOS ${f.num} is fighter-ready.`);return}
+  if(f.ramp===1&&f.rbuild<3){f.rbuild+=units;if(f.rbuild>=3){f.ramp=2;log('ok',`${MOBS[m].n}: Base Recovery builds out the FOS ${f.num} ramp (now ${rampL(2)}).`)}return}
+  f.fuel+=units*4}
+function resolveLines(){
+  const tally={},miss=[];let flown=0,goodRej=0;
+  G.lines.forEach(L=>{const r=lineCheck(L,tally),f=aiFos(L.mob,L.fos),ok=L.dec==='ok',units=L.type==='C-17'?2:1,tag=`${L.cs} (${L.type}, ${L.mob} → FOS ${L.fos})`;
+    if(ok&&!r.v.length){tally[L.fos]={g:r.ng,p:r.np};deliver(L.mob,f,units);flown++;G.acc.ok++}
+    else if(!ok&&r.v.length){goodRej++;G.acc.ok++}
+    else if(!ok){G.acc.bad++;miss.push(`Held ${tag}, but it was a good line. That lift is wasted this turn.`)}
+    else{G.acc.bad++;const k=r.v[0].k;
+      if(k==='range'){G.ai[L.mob].lostC17=(G.ai[L.mob].lostC17||0)+(L.type==='C-17'?1:0);G.dp+=10;miss.push(`Approved ${tag}: ${r.v[0].t}. It runs out of fuel and is lost with its load. +10 DP.`)}
+      else if(k==='mog'||k==='ppr'){G.dp+=5;miss.push(`Approved ${tag}: ${r.v[0].t}. The station can't take it: the aircraft holds, burns its fuel and returns without delivering. +5 DP for the safety violation.`)}
+      else miss.push(`Approved ${tag}: ${r.v[0].t}. The load doesn't get delivered.`)}});
+  log(miss.length?'acc':'ok',`Airlift: ${flown} line${flown===1?'':'s'} delivered, ${goodRej} bad line${goodRej===1?'':'s'} correctly rejected.`);
+  miss.forEach(t=>log('bad',t));
+}
+/* ---------- CAOC: fighter lines ---------- */
+function genFLines(){
+  G.flines=[];let id=1;const areas0=m=>OP_AREAS[m][phase()];
+  Object.keys(MOBS).forEach(m=>{G.ai[m].fos.forEach(f=>{
+    if(f.prog<10||f.down||!f.fighters||G.access[fosCountry(f.num)]===false)return;
+    let left=Math.min(f.fighters,4),budget=f.fuel;
+    while(left>0){let n=Math.min(2,left,Math.max(budget,0));if(n<=0&&Math.random()<.85)break;if(n<=0)n=1;left-=n;budget-=n;
+      const reach=areas0(m).filter(h=>hexDist(f.hex,h)<=4);if(!reach.length)break;
+      const idd=reach.filter(h=>(G.pla[h]||[]).some(t=>t.id===2&&t.s!=='sj'));
+      let hex=phase()==='conflict'&&idd.length?pick(idd):pick(reach);
+      if(Math.random()<.25){const fl=pick(['ship','range','area','fuel']);
+        if(fl==='ship'&&f.fighters>=3){n=3}
+        else if(fl==='range'){const far=ZONE_HEXES[1].concat(ZONE_HEXES[2]).filter(h=>hexDist(f.hex,h)>=5&&hexDist(f.hex,h)<=6);if(far.length)hex=pick(far)}
+        else if(fl==='area'){const o=ZONE_HEXES[1].concat(ZONE_HEXES[2]).filter(h=>hexDist(f.hex,h)<=3&&!areas0(m).includes(h));if(o.length)hex=pick(o)}
+        else if(fl==='fuel'){n=Math.min(2,f.fighters);budget=-99}}
+      G.flines.push({id:id++,mob:m,fos:f.num,n,hex,dec:null});if(budget<0)break}})});
+}
+function fCheck(L,used){const f=aiFos(L.mob,L.fos),v=[];const inArea=OP_AREAS[L.mob][phase()].includes(L.hex);
+  if(L.n>2)v.push({k:'ship',t:`a ${L.n}-ship breaks the 2-ship maximum`});
+  if(hexDist(f.hex,L.hex)>4)v.push({k:'range',t:`hex ${hexLabel(L.hex)} is ${hexDist(f.hex,L.hex)} hexes from FOS ${f.num}, beyond fighter range (4)`});
+  if(f.fuel-(used[f.num]||0)<L.n)v.push({k:'fuel',t:`FOS ${f.num} only has ${Math.max(0,f.fuel-(used[f.num]||0))} fuel left for this line`});
+  if(!inArea)v.push({k:'area',t:`hex ${hexLabel(L.hex)} isn't one of ${L.mob}'s ${phase()==='crisis'?'EXORD':'FRAGORD'} op areas, so it earns nothing`});
+  return v}
+function aiSortie(m,f,hex,quiet){
+  const ft=MOBS[m].ft,mine=ft==='F-22'?20:12,inArea=OP_AREAS[m][phase()].includes(hex);
+  f.fuel=Math.max(0,f.fuel-1);G.sorties++;
+  const cs=G.role==='cspoc';
+  if(phase()==='crisis'){if(inArea&&!cs)G.mp+=5;return inArea?5:0}
+  let got=inArea?5:0;if(!cs)G.mp+=got;
+  const toks=G.pla[hex]||[];let mod=0;if(gpsHexes().has(hex))mod++;if(G.space.cyberHex===hex)mod++;const J=jamAgainst(hex);
+  const fight=t=>{const str=t.s==='aj'?12:t.s;const r1=d(mine)+mod,r2=d(str)+J.jam;return {win:r1>r2,r1,r2,str}};
+  const unknown=toks.filter(t=>t.id<2&&t.s!=='sj').sort((a,b)=>(b.s==='aj'?12:b.s)-(a.s==='aj'?12:a.s));
+  if(unknown.length){const u=unknown[0],r=fight(u);u.id=2;if(!r.win){f.fighters--;G.ai[m].lostF=(G.ai[m].lostF||0)+1;if(cs)G.mp-=1;log('bad',`${m} ${ft} from FOS ${f.num} is ambushed by an unidentified ${TOKEN_NAME(u)} in hex ${hexLabel(hex)} and lost.${cs?' −1 CSpOC points.':''}`);return got}}
+  const tgt=toks.find(t=>t.id===2&&t.s!=='sj');
+  if(tgt){const r=fight(tgt);if(r.win){toks.splice(toks.indexOf(tgt),1);const mp=r.str===20?10:r.str===12?7:(G.frag==='sams'?8:5);const credit=!cs||tgt.sp;if(credit)G.mp+=mp;got+=mp;G.kills++;log('ok',`${m} ${ft} destroys the ${TOKEN_NAME(tgt)} in hex ${hexLabel(hex)} (${r.r1} vs ${r.r2}${mod?`, +${mod} GPS/cyber`:''})${credit?`: +${mp} ${cs?'CSpOC points':'MP'}`:': found by contact, not from space, so no CSpOC credit'}.`)}
+    else{f.fighters--;G.ai[m].lostF=(G.ai[m].lostF||0)+1;log('bad',`${m} ${ft} loses to the ${TOKEN_NAME(tgt)} in hex ${hexLabel(hex)} (${r.r1} vs ${r.r2}).`)}}
+  return got}
+function resolveFLines(){
+  const used={},miss=[];let flown=0,goodRej=0,mp0=G.mp;
+  G.flines.forEach(L=>{const f=aiFos(L.mob,L.fos),v=fCheck(L,{}),ok=L.dec==='ok',tag=`${L.mob} ${L.n}-ship from FOS ${L.fos} to hex ${hexLabel(L.hex)}`;
+    if(ok&&jamBlocks(f)){miss.push(`${tag} is scrubbed: PLA comm jamming in GEO zone ${zoneOfFos(f.num)} with no COMM satellite coverage.`);return}
+    if(ok&&!v.length){for(let i=0;i<L.n&&f.fighters>0;i++)aiSortie(L.mob,f,L.hex);flown+=L.n;G.acc.ok++}
+    else if(!ok&&v.length){goodRej++;G.acc.ok++}
+    else if(!ok){G.acc.bad++;miss.push(`Held the ${tag}, but it was a good line.`)}
+    else{G.acc.bad++;const k=v[0].k;
+      if(k==='ship'){G.dp+=5;miss.push(`Approved the ${tag}: ${v[0].t}. ROE violation, the package is scrubbed. +5 DP.`)}
+      else if(k==='range'){f.fighters--;G.ai[L.mob].lostF=(G.ai[L.mob].lostF||0)+1;f.fuel=Math.max(0,f.fuel-1);miss.push(`Approved the ${tag}: ${v[0].t}. A fighter runs out of fuel and is lost.`)}
+      else if(k==='fuel')miss.push(`Approved the ${tag}: ${v[0].t}. The jets miss their takeoff window.`)
+      else if(k==='area'){f.fuel=Math.max(0,f.fuel-L.n);miss.push(`Approved the ${tag}: ${v[0].t}. Fuel burned for no MP.`)}
+      else miss.push(`Approved the ${tag}: ${v[0].t}.`)}});
+  if(G.flines.length)log(miss.length?'acc':'ok',`Fighters: ${flown} sorties flown for ${G.mp-mp0} MP, ${goodRej} bad line${goodRej===1?'':'s'} correctly rejected.`);
+  miss.forEach(t=>log('bad',t));
+}
+/* ---------- CSpOC role: MOBs fly on their own ---------- */
+function autoLift(){
+  const blocked=new Set();
+  Object.keys(MOBS).forEach(m=>{const A=G.ai[m];let units=3+d(2)-(G.exord==='sealift'&&day()===1?1:0);
+    const open=A.fos.filter(f=>G.access[fosCountry(f.num)]!==false);
+    for(let i=0;units>0&&open.length&&i<20;i++){const f=open[i%open.length];if(stormBlocks(f)){blocked.add(zoneOfFos(f.num));continue}deliver(m,f,1);units--}});
+  {const st=G.space.storm;if(st&&st.t===G.turn&&covers(st.z,'WX')){G.mp+=5;log('ok',`Weather satellites forecast the typhoon over GEO zone ${st.z}, so airlift routes around it: +5 CSpOC points.`)}}
+  blocked.forEach(z=>log('bad',`Typhoon over GEO zone ${z}: with no weather satellite coverage, airlift into zone ${z} FOS is cancelled.`));
+}
+function autoSorties(){
+  const mp0=G.mp,jam=new Set();let n=0;
+  Object.keys(MOBS).forEach(m=>G.ai[m].fos.forEach(f=>{
+    if(f.prog<10||f.down||!f.fighters||G.access[fosCountry(f.num)]===false)return;
+    if(jamBlocks(f)){jam.add(zoneOfFos(f.num));return}
+    const reach=OP_AREAS[m][phase()].filter(h=>hexDist(f.hex,h)<=4);if(!reach.length)return;
+    const idd=reach.filter(h=>(G.pla[h]||[]).some(t=>t.id===2&&t.s!=='sj'));
+    const k=Math.min(f.fighters,4,f.fuel);
+    for(let i=0;i<k&&f.fighters>0;i++){const hex=phase()==='conflict'&&idd.length?idd[i%idd.length]:reach[i%reach.length];aiSortie(m,f,hex);n++}}));
+  {const cj=G.space.commJam;if(cj&&cj.t===G.turn&&covers(cj.z,'COMM')){G.mp+=5;log('ok',`COMM satellites keep GEO zone ${cj.z} talking through the PLA jamming: +5 CSpOC points.`)}}
+  jam.forEach(z=>log('bad',`PLA comm jamming in GEO zone ${z}: with no COMM satellite coverage, MOB sorties from zone ${z} are scrubbed.`));
+  log(n?'ok':'acc',`The MOBs fly ${n} sortie${n===1?'':'s'}.`);
+}
+function moveFighters(){Object.keys(MOBS).forEach(m=>{const A=G.ai[m];A.fos.forEach(f=>{f.fighters+=f.inbound;f.inbound=0;
+  if(f.prog<10)return;const room=rampF(f.ramp)-f.fighters;const mv=Math.min(Math.max(0,room),A.fightersMob);if(mv>0){A.fightersMob-=mv;f.inbound=mv}})})}
+function aiStrikes(){Object.keys(MOBS).forEach(m=>G.ai[m].fos.forEach(f=>{
+  if(f.down>0){f.down--;return}if(f.prog<10||d(10)<=7)return;
+  const mw=covers(zoneOfFos(f.num),'MW'),pla=d(20),def=d(10)+(mw?1:0)+1;if(mw&&G.role==='cspoc')G.mp+=2;
+  if(pla>def){f.down=2;log('bad',`PLA missiles hit ${m}'s FOS ${f.num} (${pla} vs ${def}${mw?', missile warning +1':''}). No sorties from it for 2 turns.`)}}))}
+function aiLooks(){G.space.sats.forEach(s=>{if(!s.alive||s.placed>=G.turn||!['MW','ISR'].includes(s.type))return;const hs=lookHexes(s);if(!hs.length)return;
+  const want=h=>(G.pla[h]||[]).filter(t=>SAT_TYPES[s.type].sees.includes(t.s)&&t.id<2).length;const best=hs.slice().sort((a,b)=>want(b)-want(a))[0];if(want(best))spaceLook(s,best)})}
+function newCCIR(){
+  const reach=new Set();G.space.sats.forEach(s=>{if(s.alive&&s.placed<G.turn&&['MW','ISR','SDA'].includes(s.type))lookHexes(s).forEach(h=>reach.add(h))});
+  const areas=theaterAreas('conflict').concat(theaterAreas());let opts=[...reach].filter(h=>areas.includes(h));if(!opts.length)opts=[...reach];
+  if(!opts.length){G.ccir=null;return}
+  const pref=opts.filter(h=>(G.pla[h]||[]).some(t=>t.id<2));const hex=pick(pref.length?pref:opts);
+  G.ccir={hex,t:G.turn,done:false};log('acc',`CFACC intel request (CCIR): look at hex ${hexLabel(hex)} this turn for +3 MP.`)}
+function executeTheaterTurn(){
+  if(G.over)return;log('h',`Execution · Day ${day()} Turn ${G.turn}${isNight()?' (night)':''}`);
+  if(G.role==='cspoc'){const L=G.space.lost;if(L>(G.lostSeen||0)){G.mp-=3*(L-(G.lostSeen||0));log('bad',`${L-(G.lostSeen||0)} US satellite(s) lost since last turn: −3 CSpOC points each.`);G.lostSeen=L}}
+  if(G.role==='caoc'){resolveLines();resolveFLines()}else{autoLift();autoSorties()}
+  moveFighters();
+  if(G.turn%turnsPerDay===0){log('h',`End of day ${day()}`);rollAccess(false);allocPool();Object.keys(MOBS).forEach(m=>G.ai[m].lostC17=0);
+    if(G.role==='caoc')log('acc',`CFACC pool for tomorrow: ${G.pool.c17} C-17s and ${G.pool.c130} C-130s. Apportion them on the Theater tab.`)}
+  if(G.turn>=lastTurn()){endGame();save();return}
+  G.turn++;
+  log('h',`Day ${day()} · Turn ${G.turn} · ${phase()==='crisis'?'Crisis':'Conflict'}${isNight()?' · Night':''}`);
+  if(G.turn===2*turnsPerDay+1){log('bad','FRAGORD received: lethal force is authorized. Op areas change, the MOBs may strike identified PLA targets, PRC satellites turn hostile, and FOS can be struck.');applyFragord()}
+  G.space.cyberHex=null;
+  randomEvent();spaceAdvance();
+  if(phase()==='conflict')aiStrikes();
+  if(G.role==='caoc'){aiLooks();genLines();genFLines()}else newCCIR();
+  save();
+}
+/* ---------- THEATER UI ---------- */
+function theaterPanel(){
+  let h=`<div class="stack"><p class="help">${G.role==='caoc'?'Each MOB builds 2 FOS. A FOS needs 10 units of airlift to become fighter-ready (C-17 = 2 units, C-130 = 1). After that, lift goes to the ramp build and then fuel (4 fuel per unit). Fighters fly only from ready FOS and need 1 fuel per sortie.':'The four MOBs build and fly on their own. Your satellites decide whether they can strike: they only attack identified targets, comm jamming scrubs a zone without COMM coverage, and a typhoon cancels a zone\'s airlift without WX coverage.'}</p>`;
+  if(G.role==='caoc'){const used=Object.values(G.appo).reduce((a,x)=>({c17:a.c17+x.c17,c130:a.c130+x.c130}),{c17:0,c130:0});
+    h+=`<div class="fos"><div class="fos-head"><b>Apportionment for day ${day()}</b><span class="small muted">Pool: ${G.pool.c17} C-17 · ${G.pool.c130} C-130 · assigned ${used.c17} / ${used.c130}</span></div>
+    <div class="tbl"><table><thead><tr><th>MOB</th><th>C-17</th><th>C-130</th><th>Needs</th></tr></thead><tbody>${Object.keys(MOBS).map(m=>{const A=G.ai[m];const need=A.fos.map(f=>f.prog<10?`FOS ${f.num} ${f.prog}/10`:`FOS ${f.num} ${f.fuel} fuel`).join(' · ');
+      return `<tr><td><b style="color:${MOB_COLOR[m]}">■</b> ${MOBS[m].n}</td><td><input type="number" min="0" max="${G.pool.c17}" value="${G.appo[m].c17}" data-appo="${m}|c17" aria-label="${m} C-17s"></td><td><input type="number" min="0" max="${G.pool.c130}" value="${G.appo[m].c130}" data-appo="${m}|c130" aria-label="${m} C-130s"></td><td class="small">${need}</td></tr>`}).join('')}</tbody></table></div>
+    <p class="small muted">Changes rebuild this turn's airlift ATO. ${used.c17>G.pool.c17||used.c130>G.pool.c130?'<b style="color:var(--bad)">You have assigned more aircraft than the pool holds.</b>':''}</p></div>`}
+  if(G.role==='cspoc'&&G.ccir)h+=`<div class="fos"><b>CCIR this turn:</b> <span>look at hex ${hexLabel(G.ccir.hex)} with an MW, ISR or SDA satellite for +3 MP. ${G.ccir.done?'<span class="pill ok">done</span>':G.ccir.t===G.turn?'<span class="pill warn">open</span>':'<span class="pill">expired</span>'}</span></div>`;
+  h+='<div class="tbl"><table><thead><tr><th>MOB / FOS</th><th>Build</th><th>Ramp (MOG)</th><th>Fighters</th><th>Fuel</th><th>Status</th></tr></thead><tbody>';
+  Object.keys(MOBS).forEach(m=>{const A=G.ai[m];h+=`<tr><td colspan="6"><b style="color:${MOB_COLOR[m]}">■</b> <b>${MOBS[m].n}</b> <span class="small muted">${MOBS[m].ft}s · ${A.fightersMob} at the MOB${A.lostF?` · ${A.lostF} lost`:''}</span></td></tr>`;
+    A.fos.forEach(f=>{const st=G.access[fosCountry(f.num)]===false?'<span class="pill bad">no access</span>':f.down?`<span class="pill bad">struck (${f.down})</span>`:f.prog>=10?'<span class="pill ok">ready</span>':'<span class="pill">building</span>';
+      h+=`<tr><td>FOS ${f.num} <span class="muted small">${fosCountry(f.num)} · hex ${hexLabel(f.hex)} · zone ${zoneOfFos(f.num)}</span></td><td><div class="meter"><i style="width:${f.prog*10}%"></i></div></td><td class="small">${rampL(f.ramp)}${f.fork?'':' · <b style="color:var(--warn)">no forklift</b>'}</td><td class="mono">${f.fighters}${f.inbound?` +${f.inbound}`:''}</td><td class="mono">${f.fuel}</td><td>${st}</td></tr>`})});
+  return h+'</tbody></table></div></div>';
+}
+function decBtns(kind,L){return `<div class="row"><button class="btn sm ${L.dec==='ok'?'primary':''}" data-dec="${kind}|${L.id}|ok" aria-pressed="${L.dec==='ok'}">Approve</button><button class="btn sm ${L.dec==='no'?'primary':''}" data-dec="${kind}|${L.id}|no" aria-pressed="${L.dec==='no'}">Reject</button></div>`}
+function airPanel(){
+  const tally=liveTally();const open=G.lines.filter(L=>!L.dec).length;
+  let h=`<div class="stack"><p class="help">Verify every line before it flies. Check <b>range</b> (land: distance ≤ range; download and return: distance + 1 + distance ≤ range; C-130 3, C-17 4), the <b>load against the config</b>, a <b>forklift</b> for pallets, and the <b>ramp</b>: aircraft left on the ground ≤ MOG and PPRs ≤ 2 × MOG (C-130 = 1, C-17 = 1.5). Lines are checked in order against the lines you approved above them.</p>
+  <div class="row"><span class="small">${open} of ${G.lines.length} not reviewed (held if you execute).</span><button class="btn sm" id="okall">Approve all unreviewed</button></div>
+  <div class="tbl"><table><thead><tr><th>Station</th><th>MOG</th><th>Forklift</th><th>Ground at end</th><th>PPRs</th></tr></thead><tbody>${Object.keys(MOBS).flatMap(m=>G.ai[m].fos.map(f=>{const t=tally[f.num]||{g:0,p:0},U=rampU(f.ramp);return `<tr><td><b style="color:${MOB_COLOR[m]}">■</b> FOS ${f.num}</td><td class="small">${rampL(f.ramp)}</td><td>${f.fork?'yes':'<b style="color:var(--warn)">no</b>'}</td><td class="mono">${fmt(t.g)} / ${U}</td><td class="mono">${fmt(t.p)} / ${2*U}</td></tr>`})).join('')}</tbody></table></div>`;
+  if(!G.lines.length)h+='<p class="muted small">No airlift lines this turn.</p>';
+  G.lines.forEach(L=>{const c=AC[L.type].cfg.find(c=>c.n===L.cfg);
+    h+=`<div class="ac"><div class="row" style="justify-content:space-between"><b class="mono"><span style="color:${MOB_COLOR[L.mob]}">■</span> ${esc(L.cs)} · ${L.type}</b><span class="small muted">${MOBS[L.mob].n} → FOS ${L.fos} · ${L.dist} hex${L.dist===1?'':'es'}</span></div>
+    <div class="small">${L.intent==='return'?'Download and return':'Land and stay'} · ${c.n} config (${c.pp} PP + ${c.pax} PAX) · load <b>${L.pp} PP + ${L.pax} PAX</b>${L.pp?` · ${L.fork?'brings a forklift':'no forklift aboard'}`:''}</div>${decBtns('air',L)}</div>`});
+  return h+'</div>';
+}
+function flyPanel(){
+  const open=G.flines.filter(L=>!L.dec).length;
+  let h=`<div class="stack"><p class="help">Fighter lines need: a 2-ship at most, a target within 4 hexes of the FOS, enough fuel at the FOS, and a hex in that MOB's ${phase()==='crisis'?'EXORD':'FRAGORD'} op areas.${phase()==='conflict'?' In conflict, a strike needs an <b>identified</b> target (the CSpOC is finding them). A line into a hex with only unknown contacts is legal but earns sortie MP only and risks an ambush.':''} Comm jamming scrubs a zone's sorties if no COMM satellite covers it.</p>`;
+  if(!G.flines.length)return h+'<p class="muted small">No fighter lines yet. Fighters fly once a MOB has a ready FOS and its jets have moved in.</p></div>';
+  h+=`<div class="row"><span class="small">${open} of ${G.flines.length} not reviewed (held if you execute).</span><button class="btn sm" id="fokall">Approve all unreviewed</button></div>`;
+  G.flines.forEach(L=>{const f=aiFos(L.mob,L.fos),toks=(G.pla[L.hex]||[]).filter(t=>t.id>0);const inArea=OP_AREAS[L.mob][phase()].includes(L.hex);
+    h+=`<div class="ac"><div class="row" style="justify-content:space-between"><b class="mono"><span style="color:${MOB_COLOR[L.mob]}">■</span> ${MOBS[L.mob].ft} ${L.n}-ship · FOS ${L.fos} → hex ${hexLabel(L.hex)}</b><span class="small muted">${MOBS[L.mob].n}</span></div>
+    <div class="small">Distance ${hexDist(f.hex,L.hex)} · FOS fuel ${f.fuel} · ${L.mob} op areas: ${OP_AREAS[L.mob][phase()].map(hexLabel).join(', ')} · in hex: ${toks.length?toks.map(t=>t.id===2?TOKEN_TAG(t):'?').join('/'):'no known contacts'}${gpsHexes().has(L.hex)?' · GPS +1':''}</div>${decBtns('fly',L)}</div>`});
+  return h+'</div>';
+}
+function renderTheater(){
+  const app=$('#app'),tgt=goal();
+  const tabs=G.role==='caoc'?[['thr','Theater'],['air','Airlift ATO'],['fly','Fighter ATO']]:[['space','Space (CSpOC)'],['thr','Theater']];
+  if(!tabs.some(t=>t[0]===UI.tab))UI.tab=tabs[0][0];
+  const open=G.role==='caoc'?G.lines.filter(L=>!L.dec).length+G.flines.filter(L=>!L.dec).length:0;
+  app.innerHTML=`
+  <div class="bar">
+    <h1><small>Operation Pacific Shield · ${esc(ROLES[G.role].n)}</small>Campaign</h1>
+    <div class="stats">
+      <div class="stat"><span>Day / Turn</span><b>${day()} / ${G.turn}<span class="muted" style="font-size:.8rem"> of ${lastTurn()}</span></b></div>
+      <div class="stat"><span>Phase</span><b style="color:${phase()==='crisis'?'var(--warn)':'var(--bad)'}">${phase()==='crisis'?'Crisis':'Conflict'}${isNight()?' · Night':''}</b></div>
+      <div class="stat"><span>${G.role==='cspoc'?'CSpOC pts':'Theater MP'}</span><b>${G.mp}</b></div>
+      <div class="stat"><span>Demoral.</span><b>${G.dp}</b></div>
+      <div class="stat"><span>Net / Goal</span><b style="color:${mpNet()>=tgt?'var(--ok)':'inherit'}">${mpNet()} / ${tgt}</b></div>
+      ${G.role==='caoc'?`<div class="stat"><span>Calls right</span><b>${G.acc.ok}/${G.acc.ok+G.acc.bad}</b></div>`:`<div class="stat"><span>Identified</span><b>${G.space.ident}</b></div>`}
+    </div>
+    <div class="row"><button class="btn sm" id="help">How to play</button><button class="btn sm" id="restart">New game</button>
+      <button class="btn primary" id="exec" ${G.over?'disabled':''}>${G.over?'Game over':`Execute turn ${G.turn}${open?` (${open} unreviewed)`:''}`}</button></div>
+  </div>
+  <div class="grid">
+    <div class="stack">
+      <div class="card">${mapSVG()}
+        <div class="legend">${Object.keys(MOBS).map(m=>`<span><i style="border-color:${MOB_COLOR[m]};border-style:dashed"></i>${m} op areas</span>`).join('')}<span><i style="border-color:#c1121f;background:#c1121f"></i>Identified PLA</span><span><i style="border-color:#5b6670;background:#5b6670"></i>Unidentified</span><span><i style="border-color:#38d0f0;border-style:dashed"></i>Satellite footprint</span><span>Scroll, pinch or + / − to zoom. Drag to pan.</span></div>
+      </div>
+      <div class="card stack" style="gap:6px"><h3>Orders</h3><p class="small" style="margin:0"><b>EXORD:</b> ${esc(EXORDS[G.exord].n)}. <span class="muted">${esc(EXORDS[G.exord].d)}</span></p><p class="small" style="margin:0"><b>FRAGORD:</b> ${G.frag?`${esc(FRAGORDS[G.frag].n)}. <span class="muted">${esc(FRAGORDS[G.frag].d)}</span>`:`<span class="muted">arrives at the start of day 3 (turn ${2*turnsPerDay+1}).</span>`}</p></div>
+      <div class="card"><h3>Turn log</h3><div class="log" id="log">${G.log.slice(-90).map(l=>`<p class="${l.cls}">${esc(l.msg)}</p>`).join('')}</div></div>
+    </div>
+    <div class="card">
+      <nav role="tablist">${tabs.map(([k,l])=>`<button role="tab" data-tab="${k}" aria-selected="${UI.tab===k}">${l}</button>`).join('')}</nav>
+      <div id="panel">${({thr:theaterPanel,air:airPanel,fly:flyPanel,space:spacePanel})[UI.tab]()}</div>
+    </div>
+  </div>
+  ${UI.showHelp?helpModalTheater():''}${G.over&&!UI.ackOver?overModalTheater():''}`;
+  bindTheater();
+  const lg=$('#log');if(lg)lg.scrollTop=lg.scrollHeight;
+}
+function helpModalTheater(){const c=G.role==='caoc';return `<div class="overlay" id="ov"><div class="modal" role="dialog" aria-label="How to play">
+  <h2>${c?'Playing the CAOC':'Playing the CSpOC'}</h2>
+  <ol class="steps">${c?`
+    <li><b>Theater:</b> each day, split the CFACC's C-17s and C-130s among the four MOBs. Put lift where FOS are closest to ready, or where fuel is running out.</li>
+    <li><b>Airlift ATO:</b> the MOBs submit a line for every aircraft. About 1 in 5 has a mistake: a round trip beyond range, a load that doesn't fit the config, pallets with no forklift, or too many aircraft for the ramp. Approve the good lines and reject the bad ones.</li>
+    <li><b>Fighter ATO:</b> once FOS are ready, the MOBs request sorties. Reject 3-ships, targets beyond 4 hexes, lines without fuel, and hexes outside that MOB's op areas. In conflict, kills only come from identified targets.</li>
+    <li>Press <b>Execute</b>. The log shows what each wrong call cost. A good line you hold wastes lift. A bad line you approve can lose an aircraft, saturate a ramp (DP), or burn fuel for nothing.</li>`:`
+    <li><b>Space (CSpOC):</b> place your satellites on turn 1. Each turn they move one position. Over the theater, use MW, ISR and SDA to look at hexes and identify PLA targets for all four MOBs.</li>
+    <li><b>CCIR:</b> each turn the CFACC asks for a look at one hex. Answer it for +3 MP.</li>
+    <li><b>Coverage:</b> keep COMM and WX satellites over both GEO zones. Comm jamming scrubs a zone's sorties without COMM, and a typhoon cancels its airlift without WX. Missile warning helps FOS ride out strikes.</li>
+    <li><b>Conflict:</b> the MOBs only strike identified targets, and unknown threats ambush them. Aim GPS and cyber where they fly. Use Orbital Warfare against PRC attack satellites and jammers.</li>`}
+  </ol>
+  <p class="help">${c?'Score is the theater\'s net MP: everything the four computer-run MOBs earn, minus 1 for every 5 DP.':'CSpOC points: +2 for each PLA target or PRC satellite you identify, +3 per CCIR, +5 per PRC satellite or jammer destroyed, +5 each time COMM or WX coverage beats jamming or a typhoon, +2 when missile warning covers a struck FOS, plus the MP of every PLA target the MOBs kill that your satellites identified. You lose 3 per US satellite lost and 1 per MOB fighter ambushed by a threat you never identified.'} Days 1–2 are crisis and day 3 brings the FRAGORD.</p>
+  <div class="row"><button class="btn primary" id="closehelp">Got it</button></div></div></div>`}
+function overModalTheater(){const net=mpNet(),tgt=goal();const lostF=Object.values(G.ai).reduce((n,a)=>n+(a.lostF||0),0);const ready=Object.values(G.ai).reduce((n,a)=>n+a.fos.filter(f=>f.prog>=10).length,0);
+  return `<div class="overlay" id="ov2"><div class="modal" role="dialog" aria-label="Campaign result">
+  <h2>${net>=tgt?'Victory':'Defeat'}: ${net} net MP of ${tgt}</h2>
+  <div class="tbl"><table><tbody><tr><td>Theater mission points</td><td class="mono">${G.mp}</td></tr><tr><td>Demoralization points</td><td class="mono">${G.dp} (−${Math.floor(G.dp/5)} MP)</td></tr>
+  ${G.role==='caoc'?`<tr><td>ATO calls right</td><td class="mono">${G.acc.ok} of ${G.acc.ok+G.acc.bad}</td></tr>`:`<tr><td>PLA targets identified</td><td class="mono">${G.space.ident}</td></tr><tr><td>CCIRs answered</td><td class="mono">${G.acc.ccir}</td></tr><tr><td>US satellites lost</td><td class="mono">${G.space.lost}</td></tr>`}
+  <tr><td>Sorties flown</td><td class="mono">${G.sorties}</td></tr><tr><td>PLA targets destroyed</td><td class="mono">${G.kills}</td></tr><tr><td>Fighters lost</td><td class="mono">${lostF}</td></tr><tr><td>FOS ready at the end</td><td class="mono">${ready} of 8</td></tr></tbody></table></div>
+  <div class="row"><button class="btn" id="seelog">Review the log</button><button class="btn primary" id="again">New campaign</button></div></div></div>`}
+function bindTheater(){
+  $('#exec').onclick=()=>{executeTurn();render()};
+  $('#help').onclick=()=>{UI.showHelp=true;render()};
+  $('#restart').onclick=()=>{UI.confirmRestart?(store.del('ops-campaign-v2'),G=null,UI={tab:'fos',rfiPick:{}},render()):(UI.confirmRestart=true,$('#restart').textContent='Click again to confirm')};
+  const ch=$('#closehelp');if(ch)ch.onclick=()=>{UI.showHelp=false;render()};
+  const sl=$('#seelog');if(sl)sl.onclick=()=>{UI.ackOver=true;render()};
+  const ag=$('#again');if(ag)ag.onclick=()=>{store.del('ops-campaign-v2');G=null;UI={tab:'fos',rfiPick:{}};render()};
+  document.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>{UI.tab=b.dataset.tab;render()});
+  bindZoom();if(G.role==='cspoc')bindSpace();
+  document.querySelectorAll('[data-dec]').forEach(b=>b.onclick=()=>{const [k,id,v]=b.dataset.dec.split('|');const L=(k==='air'?G.lines:G.flines).find(x=>x.id==id);L.dec=L.dec===v?null:v;save();render()});
+  const oa=$('#okall');if(oa)oa.onclick=()=>{G.lines.forEach(L=>{if(!L.dec)L.dec='ok'});save();render()};
+  const fa=$('#fokall');if(fa)fa.onclick=()=>{G.flines.forEach(L=>{if(!L.dec)L.dec='ok'});save();render()};
+  document.querySelectorAll('[data-appo]').forEach(inp=>inp.onchange=()=>{const [m,t]=inp.dataset.appo.split('|');G.appo[m][t]=Math.max(0,Math.min(G.pool[t],parseInt(inp.value)||0));
+    const tot=Object.values(G.appo).reduce((n,x)=>n+x[t],0);if(tot>G.pool[t])G.appo[m][t]-=tot-G.pool[t];genLines();save();render()});
+}
+
 /* =================== RENDER =================== */
 const $=s=>document.querySelector(s);
 function render(){
   const app=$('#app');
   if(!G){app.innerHTML=startScreen();bindStart();return}
+  if(isTheater())return renderTheater();
   const M=MOBS[G.mob],tgt=LENGTHS[G.len].target;
   app.innerHTML=`
   <div class="bar">
@@ -651,12 +958,16 @@ function mapSVG(){
   const V=UI.view||MAP_VIEW;
   let s=`<div class="mapbox"><div class="zoomctl"><button class="btn sm" id="zin" aria-label="Zoom in">+</button><button class="btn sm" id="zout" aria-label="Zoom out">−</button><button class="btn sm" id="zreset">Fit</button></div><svg id="mapsvg" viewBox="${V.join(' ')}" role="img" aria-label="Theater map with hex grid">
     <image href="${MAP_IMG}" x="330" y="0" width="995" height="685" preserveAspectRatio="none"/>`;
-  areas.forEach(h=>{s+=`<polygon points="${poly(h)}" fill="rgba(224,33,138,.12)" stroke="#e0218a" stroke-width="2.5" stroke-dasharray="6 4"/>`});
+  if(isTheater())Object.keys(MOBS).forEach((m,i)=>OP_AREAS[m][phase()].forEach(h=>{const {x,y}=hexXY(h);const k=0.92-i*0.1;const pts=[];for(let j=0;j<6;j++){const a=Math.PI/180*(60*j-30);pts.push((x+HEXR*k*Math.cos(a)).toFixed(1)+','+(y+HEXR*k*Math.sin(a)).toFixed(1))}
+    s+=`<polygon points="${pts.join(' ')}" fill="none" stroke="${MOB_COLOR[m]}" stroke-width="2.5" stroke-dasharray="6 4"/>`}));
+  else areas.forEach(h=>{s+=`<polygon points="${poly(h)}" fill="rgba(224,33,138,.12)" stroke="#e0218a" stroke-width="2.5" stroke-dasharray="6 4"/>`});
   Object.entries(G.pla).forEach(([h,l])=>{const t=l.filter(t=>t.id>0);if(!t.length)return;const {x,y}=hexXY(+h);t.forEach((k,i)=>{const idd=k.id===2;s+=`<g><rect x="${x-26+i*24}" y="${y+8}" width="22" height="16" rx="2" fill="${idd?'#c1121f':'#5b6670'}" stroke="#fff"/><text x="${x-15+i*24}" y="${y+20}" font-size="10" text-anchor="middle" fill="#fff" font-family="monospace" font-weight="700">${idd?TOKEN_TAG(k):'?'}</text></g>`})});
   G.space.sats.forEach(sat=>{if(!sat.alive||sat.orbit==='G')return;const h=satHex(sat);if(h==null)return;const {x,y}=hexXY(h);const wide=lookHexes(sat).length>1;
     s+=wide?`<circle cx="${x}" cy="${y}" r="${HEXR*1.85}" fill="none" stroke="#38d0f0" stroke-width="2" stroke-dasharray="3 5" opacity=".9"/>`:'';
     s+=`<g><rect x="${x-46}" y="${y-30}" width="${sat.code.length*7+8}" height="15" rx="2" fill="#063a4a" opacity=".9"/><text x="${x-42}" y="${y-19}" font-size="10" fill="#7fe6ff" font-family="monospace">${sat.code}</text></g>`});
-  {const {x,y}=hexXY(M.hex);s+=`<circle cx="${x}" cy="${y}" r="20" fill="none" stroke="#ffd166" stroke-width="4"/>`}
+  if(isTheater()){Object.keys(MOBS).forEach(m=>{const {x,y}=hexXY(MOBS[m].hex);s+=`<circle cx="${x}" cy="${y}" r="17" fill="none" stroke="${MOB_COLOR[m]}" stroke-width="5"/>`;
+      G.ai[m].fos.forEach((f,i)=>{const p=hexXY(f.hex);const ox=(i?14:-14)+(m==='Osan'||m==='Andersen'?6:0),oy=m==='Osan'||m==='Andersen'?12:-4;s+=`<g><rect x="${p.x+ox-15}" y="${p.y+oy-9}" width="30" height="17" rx="3" fill="${f.prog>=10?(f.down?'#7a1010':'#0d5c34'):'#10202a'}" stroke="${MOB_COLOR[m]}" stroke-width="2"/><text x="${p.x+ox}" y="${p.y+oy+4}" font-size="10" text-anchor="middle" fill="#fff" font-family="monospace">${f.num}${f.prog>=10?'✓':'·'+f.prog}</text></g>`})})}
+  else{const {x,y}=hexXY(M.hex);s+=`<circle cx="${x}" cy="${y}" r="20" fill="none" stroke="#ffd166" stroke-width="4"/>`}
   G.fos.forEach(f=>{const {x,y}=hexXY(fosHex(f));const sel=UI.selFos===f.num;s+=`<circle cx="${x}" cy="${y}" r="${sel?28:24}" fill="none" stroke="#ff7b00" stroke-width="${sel?5:3}"/>`});
   const byHex={};G.aircraft.forEach(a=>{const h=locHex(a);(byHex[h]=byHex[h]||[]).push(a)});
   Object.entries(byHex).forEach(([h,list])=>{const {x,y}=hexXY(+h);s+=`<g><rect x="${x+14}" y="${y-36}" width="${16+list.length*9}" height="18" rx="3" fill="#10202a" opacity=".85"/><text x="${x+20}" y="${y-23}" font-size="12" fill="#fff" font-family="monospace">✈${list.length}</text></g>`});
@@ -762,17 +1073,18 @@ function mobPanel(){
 }
 function tcTotal(){let pp=0,pax=0,n=0;Object.entries(UI.tc||{}).forEach(([k,v])=>{if(!v)return;const [kind,id]=k.split('|');n+=v;if(kind==='kit'){pp+=TASKS[id].pp*v;pax+=TASKS[id].pax*v}else if(kind==='extra'){pp+=EXTRAS[id].pp*v;pax+=EXTRAS[id].pax*v}else pp+=STOCK[id].pp*v});return {pp,pax,n}}
 function startScreen(){
-  UI.startMob=UI.startMob||'Kadena';UI.startLen=UI.startLen||'standard';
+  UI.startMob=UI.startMob||'Kadena';UI.startLen=UI.startLen||'standard';UI.startRole=UI.startRole||'mob';const role=UI.startRole;
   const saved=store.get('ops-campaign-v2');
   return `<div class="bar"><h1><small>Operation Pacific Shield · Kingfish ACE</small>Campaign</h1></div>
   <div class="card stack" style="max-width:860px">
-    <h2>Command a Main Operating Base</h2>
-    <p class="help">You're the AEW/CC. Disperse from your MOB to Forward Operating Sites, build them up with airlift, and launch fighters into your op areas to earn Mission Points. The CFACC, CAOC and Game Master are simulated: aircraft allocation, PPR and MOG checks, dice, host nations and the PLA.</p>
-    ${saved&&!saved.over?`<div class="row"><button class="btn primary" id="resume">Resume ${esc(MOBS[saved.mob].n)} · day ${Math.ceil(saved.turn/4)} turn ${saved.turn}</button></div>`:''}
-    <h3>Choose your MOB</h3>
-    <div class="choices">${Object.entries(MOBS).map(([k,m])=>`<button class="choice" data-mob="${k}" aria-pressed="${UI.startMob===k}"><b>${m.n}</b><span class="small">${m.ft}s · hex ${m.hex}</span><br><span class="small muted">${esc(m.note)}</span></button>`).join('')}</div>
+    <h2>Choose your seat</h2>
+    <p class="help">Play a MOB commander, the CAOC or the CSpOC. Whatever you don't play is simulated: the other cells, the Game Master's dice, host nations and the PLA.</p>
+    ${saved&&!saved.over?`<div class="row"><button class="btn primary" id="resume">Resume ${esc(saved.role&&saved.role!=='mob'?ROLES[saved.role].n:MOBS[saved.mob].n)} · day ${Math.ceil(saved.turn/4)} turn ${saved.turn}</button></div>`:''}
+    <div class="choices">${Object.entries(ROLES).map(([k,r])=>`<button class="choice" data-role="${k}" aria-pressed="${role===k}"><b>${r.n}</b><span class="small muted">${esc(r.d)}</span></button>`).join('')}</div>
+    ${role==='mob'?`<h3>Choose your MOB</h3>
+    <div class="choices">${Object.entries(MOBS).map(([k,m])=>`<button class="choice" data-mob="${k}" aria-pressed="${UI.startMob===k}"><b>${m.n}</b><span class="small">${m.ft}s · hex ${m.hex}</span><br><span class="small muted">${esc(m.note)}</span></button>`).join('')}</div>`:''}
     <h3>Campaign length</h3>
-    <div class="choices">${Object.entries(LENGTHS).map(([k,l])=>`<button class="choice" data-len="${k}" aria-pressed="${UI.startLen===k}"><b>${l.label}</b><span class="small muted">${l.desc} Victory at ${l.target} net MP.</span></button>`).join('')}</div>
+    <div class="choices">${Object.entries(LENGTHS).map(([k,l])=>`<button class="choice" data-len="${k}" aria-pressed="${UI.startLen===k}"><b>${l.label}</b><span class="small muted">${l.desc} Victory at ${role==='mob'?l.target:THEATER_TARGET[role][k]} net MP${role==='mob'?'':' for the theater'}.</span></button>`).join('')}</div>
     <div class="row"><button class="btn primary" id="start">Start campaign</button></div>
   </div>`;
 }
@@ -873,7 +1185,8 @@ function bindSpace(){
 function bindStart(){
   document.querySelectorAll('[data-mob]').forEach(b=>b.onclick=()=>{UI.startMob=b.dataset.mob;render()});
   document.querySelectorAll('[data-len]').forEach(b=>b.onclick=()=>{UI.startLen=b.dataset.len;render()});
-  $('#start').onclick=()=>{newGame(UI.startMob,UI.startLen);UI.showHelp=true;UI.tab='fos';render()};
+  document.querySelectorAll('[data-role]').forEach(b=>b.onclick=()=>{UI.startRole=b.dataset.role;render()});
+  $('#start').onclick=()=>{if(UI.startRole==='mob'){newGame(UI.startMob,UI.startLen);UI.tab='fos'}else{newTheaterGame(UI.startRole,UI.startLen);UI.tab=UI.startRole==='caoc'?'thr':'space'}UI.showHelp=true;render()};
   const r=$('#resume');if(r)r.onclick=()=>{G=store.get('ops-campaign-v2');render()};
 }
 function bind(){
