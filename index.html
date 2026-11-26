@@ -95,6 +95,7 @@ th{font-size:.68rem;text-transform:uppercase;letter-spacing:.1em;color:var(--mut
 .choice[aria-pressed="true"]{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
 .choice b{display:block;font-family:var(--f-display);font-size:1.1rem}
 .help{font-size:.88rem;color:var(--muted);margin:0}
+.disclaimer{font-size:.85rem;padding:8px 10px;border:1px solid var(--warn);border-left-width:4px;border-radius:2px;background:var(--panel)}
 .help b{color:var(--ink)}
 /* space board */
 .sbwrap{overflow-x:auto}.sb{display:flex;flex-direction:column;gap:2px;min-width:560px;font-family:var(--f-mono)}
@@ -588,8 +589,9 @@ function jamAgainst(hex){let jam=0;const notes=[];
 /* =================== THEATER ROLES: CAOC and CSpOC (the 4 MOBs are computer-run) =================== */
 const ROLES={caoc:{n:'CAOC (CFACC)',d:'Apportion airlift to the four MOBs, then approve or reject every airlift and fighter line on the ATO. MOG, PPR, range, loads and targeting are on you.'},
   cspoc:{n:'CSpOC (CFSCC)',d:'Run the satellites for the whole theater. Find PLA targets for the four MOBs, answer CFACC intel requests, and protect your constellation.'},
+  medcom:{n:'MEDCOM (AFMEDCOM)',d:'Stand up four hospitals from JBPHH, fly MEDEVAC from struck FOS, triage and treat patients, and CASEVAC downed pilots.'},
   mob:{n:'MOB commander',d:'Run one AEW: pick and build FOS, plan your own airlift, fly your fighters, and run space support for your area.'}};
-const THEATER_TARGET={caoc:{short:160,standard:450,long:750},cspoc:{short:30,standard:60,long:80}};
+const THEATER_TARGET={caoc:{short:160,standard:450,long:750},cspoc:{short:30,standard:60,long:80},medcom:{short:6,standard:32,long:45}};
 const AI_FOS={Kadena:[6,8],Andersen:[7,10],Yokota:[1,4],Osan:[2,5]};
 const MOB_COLOR={Kadena:'#e0218a',Andersen:'#9b5cff',Yokota:'#19b37a',Osan:'#ff8a1f'};
 const isTheater=()=>G&&G.role&&G.role!=='mob';
@@ -609,8 +611,9 @@ function newTheaterGame(role,len){
   allocPool();
   log('h','Day 1 · Turn 1 · Crisis');
   log('bad',`EXORD condition: ${EXORDS[G.exord].n}. ${EXORDS[G.exord].d}`);
-  log('acc',role==='caoc'?`You are the CFACC. Apportion today's ${G.pool.c17} C-17s and ${G.pool.c130} C-130s, then review the ATO. The four MOBs build their FOS with whatever lift you approve.`:
+  if(role!=='medcom')log('acc',role==='caoc'?`You are the CFACC. Apportion today's ${G.pool.c17} C-17s and ${G.pool.c130} C-130s, then review the ATO. The four MOBs build their FOS with whatever lift you approve.`:
     'You run the CSpOC. Place your satellites now. They start looking next turn, and the four MOBs strike only what you identify.');
+  if(role==='medcom'){medInit();log('acc','You run AFMEDCOM. Your kits are at JBPHH. Fly them to the four MOB hospitals, then MEDEVAC casualties from the FOS and treat them.')}
   if(role==='caoc')genLines();
   save();
 }
@@ -699,16 +702,16 @@ function fCheck(L,used){const f=aiFos(L.mob,L.fos),v=[];const inArea=OP_AREAS[L.
 function aiSortie(m,f,hex,quiet){
   const ft=MOBS[m].ft,mine=ft==='F-22'?20:12,inArea=OP_AREAS[m][phase()].includes(hex);
   f.fuel=Math.max(0,f.fuel-1);G.sorties++;
-  const cs=G.role==='cspoc';
-  if(phase()==='crisis'){if(inArea&&!cs)G.mp+=5;return inArea?5:0}
-  let got=inArea?5:0;if(!cs)G.mp+=got;
+  const cs=G.role==='cspoc',nm=G.role==='medcom',down=()=>{if(nm)G.med.downed.push({id:G.med.seq++,hex,ft,age:0,go:null})};
+  if(phase()==='crisis'){if(inArea&&!cs&&!nm)G.mp+=5;return inArea?5:0}
+  let got=inArea?5:0;if(!cs&&!nm)G.mp+=got;
   const toks=G.pla[hex]||[];let mod=0;if(gpsHexes().has(hex))mod++;if(G.space.cyberHex===hex)mod++;const J=jamAgainst(hex);
   const fight=t=>{const str=t.s==='aj'?12:t.s;const r1=d(mine)+mod,r2=d(str)+J.jam;return {win:r1>r2,r1,r2,str}};
   const unknown=toks.filter(t=>t.id<2&&t.s!=='sj').sort((a,b)=>(b.s==='aj'?12:b.s)-(a.s==='aj'?12:a.s));
-  if(unknown.length){const u=unknown[0],r=fight(u);u.id=2;if(!r.win){f.fighters--;G.ai[m].lostF=(G.ai[m].lostF||0)+1;if(cs)G.mp-=1;log('bad',`${m} ${ft} from FOS ${f.num} is ambushed by an unidentified ${TOKEN_NAME(u)} in hex ${hexLabel(hex)} and lost.${cs?' −1 CSpOC points.':''}`);return got}}
+  if(unknown.length){const u=unknown[0],r=fight(u);u.id=2;if(!r.win){f.fighters--;G.ai[m].lostF=(G.ai[m].lostF||0)+1;if(cs)G.mp-=1;down();log('bad',`${m} ${ft} from FOS ${f.num} is ambushed by an unidentified ${TOKEN_NAME(u)} in hex ${hexLabel(hex)} and lost.${cs?' −1 CSpOC points.':''}`);return got}}
   const tgt=toks.find(t=>t.id===2&&t.s!=='sj');
-  if(tgt){const r=fight(tgt);if(r.win){toks.splice(toks.indexOf(tgt),1);const mp=r.str===20?10:r.str===12?7:(G.frag==='sams'?8:5);const credit=!cs||tgt.sp;if(credit)G.mp+=mp;got+=mp;G.kills++;log('ok',`${m} ${ft} destroys the ${TOKEN_NAME(tgt)} in hex ${hexLabel(hex)} (${r.r1} vs ${r.r2}${mod?`, +${mod} GPS/cyber`:''})${credit?`: +${mp} ${cs?'CSpOC points':'MP'}`:': found by contact, not from space, so no CSpOC credit'}.`)}
-    else{f.fighters--;G.ai[m].lostF=(G.ai[m].lostF||0)+1;log('bad',`${m} ${ft} loses to the ${TOKEN_NAME(tgt)} in hex ${hexLabel(hex)} (${r.r1} vs ${r.r2}).`)}}
+  if(tgt){const r=fight(tgt);if(r.win){toks.splice(toks.indexOf(tgt),1);const mp=r.str===20?10:r.str===12?7:(G.frag==='sams'?8:5);const credit=(!cs||tgt.sp)&&!nm;if(credit)G.mp+=mp;got+=mp;G.kills++;log('ok',`${m} ${ft} destroys the ${TOKEN_NAME(tgt)} in hex ${hexLabel(hex)} (${r.r1} vs ${r.r2}${mod?`, +${mod} GPS/cyber`:''})${credit?`: +${mp} ${cs?'CSpOC points':'MP'}`:cs?': found by contact, not from space, so no CSpOC credit':''}.`)}
+    else{f.fighters--;G.ai[m].lostF=(G.ai[m].lostF||0)+1;down();log('bad',`${m} ${ft} loses to the ${TOKEN_NAME(tgt)} in hex ${hexLabel(hex)} (${r.r1} vs ${r.r2}).`)}}
   return got}
 function resolveFLines(){
   const used={},miss=[];let flown=0,goodRej=0,mp0=G.mp;
@@ -732,7 +735,7 @@ function autoLift(){
   Object.keys(MOBS).forEach(m=>{const A=G.ai[m];let units=3+d(2)-(G.exord==='sealift'&&day()===1?1:0);
     const open=A.fos.filter(f=>G.access[fosCountry(f.num)]!==false);
     for(let i=0;units>0&&open.length&&i<20;i++){const f=open[i%open.length];if(stormBlocks(f)){blocked.add(zoneOfFos(f.num));continue}deliver(m,f,1);units--}});
-  {const st=G.space.storm;if(st&&st.t===G.turn&&covers(st.z,'WX')){G.mp+=5;log('ok',`Weather satellites forecast the typhoon over GEO zone ${st.z}, so airlift routes around it: +5 CSpOC points.`)}}
+  {const st=G.space.storm;if(st&&st.t===G.turn&&covers(st.z,'WX')&&G.role==='cspoc'){G.mp+=5;log('ok',`Weather satellites forecast the typhoon over GEO zone ${st.z}, so airlift routes around it: +5 CSpOC points.`)}}
   blocked.forEach(z=>log('bad',`Typhoon over GEO zone ${z}: with no weather satellite coverage, airlift into zone ${z} FOS is cancelled.`));
 }
 function autoSorties(){
@@ -744,7 +747,7 @@ function autoSorties(){
     const idd=reach.filter(h=>(G.pla[h]||[]).some(t=>t.id===2&&t.s!=='sj'));
     const k=Math.min(f.fighters,4,f.fuel);
     for(let i=0;i<k&&f.fighters>0;i++){const hex=phase()==='conflict'&&idd.length?idd[i%idd.length]:reach[i%reach.length];aiSortie(m,f,hex);n++}}));
-  {const cj=G.space.commJam;if(cj&&cj.t===G.turn&&covers(cj.z,'COMM')){G.mp+=5;log('ok',`COMM satellites keep GEO zone ${cj.z} talking through the PLA jamming: +5 CSpOC points.`)}}
+  {const cj=G.space.commJam;if(cj&&cj.t===G.turn&&covers(cj.z,'COMM')&&G.role==='cspoc'){G.mp+=5;log('ok',`COMM satellites keep GEO zone ${cj.z} talking through the PLA jamming: +5 CSpOC points.`)}}
   jam.forEach(z=>log('bad',`PLA comm jamming in GEO zone ${z}: with no COMM satellite coverage, MOB sorties from zone ${z} are scrubbed.`));
   log(n?'ok':'acc',`The MOBs fly ${n} sortie${n===1?'':'s'}.`);
 }
@@ -753,7 +756,7 @@ function moveFighters(){Object.keys(MOBS).forEach(m=>{const A=G.ai[m];A.fos.forE
 function aiStrikes(){Object.keys(MOBS).forEach(m=>G.ai[m].fos.forEach(f=>{
   if(f.down>0){f.down--;return}if(f.prog<10||d(10)<=7)return;
   const mw=covers(zoneOfFos(f.num),'MW'),pla=d(20),def=d(10)+(mw?1:0)+1;if(mw&&G.role==='cspoc')G.mp+=2;
-  if(pla>def){f.down=2;log('bad',`PLA missiles hit ${m}'s FOS ${f.num} (${pla} vs ${def}${mw?', missile warning +1':''}). No sorties from it for 2 turns.`)}}))}
+  if(pla>def){f.down=2;log('bad',`PLA missiles hit ${m}'s FOS ${f.num} (${pla} vs ${def}${mw?', missile warning +1':''}). No sorties from it for 2 turns.`);if(G.role==='medcom')addCas(f.num,3+d(6),'PLA missile strike')}}))}
 function aiLooks(){G.space.sats.forEach(s=>{if(!s.alive||s.placed>=G.turn||!['MW','ISR'].includes(s.type))return;const hs=lookHexes(s);if(!hs.length)return;
   const want=h=>(G.pla[h]||[]).filter(t=>SAT_TYPES[s.type].sees.includes(t.s)&&t.id<2).length;const best=hs.slice().sort((a,b)=>want(b)-want(a))[0];if(want(best))spaceLook(s,best)})}
 function newCCIR(){
@@ -765,9 +768,11 @@ function newCCIR(){
 function executeTheaterTurn(){
   if(G.over)return;log('h',`Execution · Day ${day()} Turn ${G.turn}${isNight()?' (night)':''}`);
   if(G.role==='cspoc'){const L=G.space.lost;if(L>(G.lostSeen||0)){G.mp-=3*(L-(G.lostSeen||0));log('bad',`${L-(G.lostSeen||0)} US satellite(s) lost since last turn: −3 CSpOC points each.`);G.lostSeen=L}}
+  if(G.role==='medcom'){medResolve();medComplete();medTreat()}
   if(G.role==='caoc'){resolveLines();resolveFLines()}else{autoLift();autoSorties()}
   moveFighters();
   if(G.turn%turnsPerDay===0){log('h',`End of day ${day()}`);rollAccess(false);allocPool();Object.keys(MOBS).forEach(m=>G.ai[m].lostC17=0);
+    if(G.role==='medcom')medDayEnd();
     if(G.role==='caoc')log('acc',`CFACC pool for tomorrow: ${G.pool.c17} C-17s and ${G.pool.c130} C-130s. Apportion them on the Theater tab.`)}
   if(G.turn>=lastTurn()){endGame();save();return}
   G.turn++;
@@ -776,12 +781,13 @@ function executeTheaterTurn(){
   G.space.cyberHex=null;
   randomEvent();spaceAdvance();
   if(phase()==='conflict')aiStrikes();
-  if(G.role==='caoc'){aiLooks();genLines();genFLines()}else newCCIR();
+  if(G.role==='medcom'){aiLooks();medNewTurn()}
+  else if(G.role==='caoc'){aiLooks();genLines();genFLines()}else newCCIR();
   save();
 }
 /* ---------- THEATER UI ---------- */
 function theaterPanel(){
-  let h=`<div class="stack"><p class="help">${G.role==='caoc'?'Each MOB builds 2 FOS. A FOS needs 10 units of airlift to become fighter-ready (C-17 = 2 units, C-130 = 1). After that, lift goes to the ramp build and then fuel (4 fuel per unit). Fighters fly only from ready FOS and need 1 fuel per sortie.':'The four MOBs build and fly on their own. Your satellites decide whether they can strike: they only attack identified targets, comm jamming scrubs a zone without COMM coverage, and a typhoon cancels a zone\'s airlift without WX coverage.'}</p>`;
+  let h=`<div class="stack"><p class="help">${G.role==='medcom'?'The four MOBs build and fly on their own. Their FOS are where casualties appear: PLA strikes hit ready FOS in conflict.':G.role==='caoc'?'Each MOB builds 2 FOS. A FOS needs 10 units of airlift to become fighter-ready (C-17 = 2 units, C-130 = 1). After that, lift goes to the ramp build and then fuel (4 fuel per unit). Fighters fly only from ready FOS and need 1 fuel per sortie.':'The four MOBs build and fly on their own. Your satellites decide whether they can strike: they only attack identified targets, comm jamming scrubs a zone without COMM coverage, and a typhoon cancels a zone\'s airlift without WX coverage.'}</p>`;
   if(G.role==='caoc'){const used=Object.values(G.appo).reduce((a,x)=>({c17:a.c17+x.c17,c130:a.c130+x.c130}),{c17:0,c130:0});
     h+=`<div class="fos"><div class="fos-head"><b>Apportionment for day ${day()}</b><span class="small muted">Pool: ${G.pool.c17} C-17 · ${G.pool.c130} C-130 · assigned ${used.c17} / ${used.c130}</span></div>
     <div class="tbl"><table><thead><tr><th>MOB</th><th>C-17</th><th>C-130</th><th>Needs</th></tr></thead><tbody>${Object.keys(MOBS).map(m=>{const A=G.ai[m];const need=A.fos.map(f=>f.prog<10?`FOS ${f.num} ${f.prog}/10`:`FOS ${f.num} ${f.fuel} fuel`).join(' · ');
@@ -818,7 +824,7 @@ function flyPanel(){
 }
 function renderTheater(){
   const app=$('#app'),tgt=goal();
-  const tabs=G.role==='caoc'?[['thr','Theater'],['air','Airlift ATO'],['fly','Fighter ATO']]:[['space','Space (CSpOC)'],['thr','Theater']];
+  const tabs=G.role==='caoc'?[['thr','Theater'],['air','Airlift ATO'],['fly','Fighter ATO']]:G.role==='medcom'?[['hosp','Hospitals'],['mato','MEDCOM ATO'],['pat','Patients'],['thr','Theater']]:[['space','Space (CSpOC)'],['thr','Theater']];
   if(!tabs.some(t=>t[0]===UI.tab))UI.tab=tabs[0][0];
   const open=G.role==='caoc'?G.lines.filter(L=>!L.dec).length+G.flines.filter(L=>!L.dec).length:0;
   app.innerHTML=`
@@ -827,10 +833,10 @@ function renderTheater(){
     <div class="stats">
       <div class="stat"><span>Day / Turn</span><b>${day()} / ${G.turn}<span class="muted" style="font-size:.8rem"> of ${lastTurn()}</span></b></div>
       <div class="stat"><span>Phase</span><b style="color:${phase()==='crisis'?'var(--warn)':'var(--bad)'}">${phase()==='crisis'?'Crisis':'Conflict'}${isNight()?' · Night':''}</b></div>
-      <div class="stat"><span>${G.role==='cspoc'?'CSpOC pts':'Theater MP'}</span><b>${G.mp}</b></div>
+      <div class="stat"><span>${G.role==='cspoc'?'CSpOC pts':G.role==='medcom'?'MEDCOM VP':'Theater MP'}</span><b>${G.mp}</b></div>
       <div class="stat"><span>Demoral.</span><b>${G.dp}</b></div>
       <div class="stat"><span>Net / Goal</span><b style="color:${mpNet()>=tgt?'var(--ok)':'inherit'}">${mpNet()} / ${tgt}</b></div>
-      ${G.role==='caoc'?`<div class="stat"><span>Calls right</span><b>${G.acc.ok}/${G.acc.ok+G.acc.bad}</b></div>`:`<div class="stat"><span>Identified</span><b>${G.space.ident}</b></div>`}
+      ${G.role==='caoc'?`<div class="stat"><span>Calls right</span><b>${G.acc.ok}/${G.acc.ok+G.acc.bad}</b></div>`:G.role==='medcom'?`<div class="stat"><span>Treated</span><b>${G.med.treated}</b></div>`:`<div class="stat"><span>Identified</span><b>${G.space.ident}</b></div>`}
     </div>
     <div class="row"><button class="btn sm" id="help">How to play</button><button class="btn sm" id="restart">New game</button>
       <button class="btn primary" id="exec" ${G.over?'disabled':''}>${G.over?'Game over':`Execute turn ${G.turn}${open?` (${open} unreviewed)`:''}`}</button></div>
@@ -845,14 +851,14 @@ function renderTheater(){
     </div>
     <div class="card">
       <nav role="tablist">${tabs.map(([k,l])=>`<button role="tab" data-tab="${k}" aria-selected="${UI.tab===k}">${l}</button>`).join('')}</nav>
-      <div id="panel">${({thr:theaterPanel,air:airPanel,fly:flyPanel,space:spacePanel})[UI.tab]()}</div>
+      <div id="panel">${({thr:theaterPanel,air:airPanel,fly:flyPanel,space:spacePanel,hosp:hospPanel,mato:matoPanel,pat:patPanel})[UI.tab]()}</div>
     </div>
   </div>
   ${UI.showHelp?helpModalTheater():''}${G.over&&!UI.ackOver?overModalTheater():''}`;
   bindTheater();
   const lg=$('#log');if(lg)lg.scrollTop=lg.scrollHeight;
 }
-function helpModalTheater(){const c=G.role==='caoc';return `<div class="overlay" id="ov"><div class="modal" role="dialog" aria-label="How to play">
+function helpModalTheater(){const c=G.role==='caoc';if(G.role==='medcom')return helpModalMed();return `<div class="overlay" id="ov"><div class="modal" role="dialog" aria-label="How to play">
   <h2>${c?'Playing the CAOC':'Playing the CSpOC'}</h2>
   <ol class="steps">${c?`
     <li><b>Theater:</b> each day, split the CFACC's C-17s and C-130s among the four MOBs. Put lift where FOS are closest to ready, or where fuel is running out.</li>
@@ -866,11 +872,21 @@ function helpModalTheater(){const c=G.role==='caoc';return `<div class="overlay"
   </ol>
   <p class="help">${c?'Score is the theater\'s net MP: everything the four computer-run MOBs earn, minus 1 for every 5 DP.':'CSpOC points: +2 for each PLA target or PRC satellite you identify, +3 per CCIR, +5 per PRC satellite or jammer destroyed, +5 each time COMM or WX coverage beats jamming or a typhoon, +2 when missile warning covers a struck FOS, plus the MP of every PLA target the MOBs kill that your satellites identified. You lose 3 per US satellite lost and 1 per MOB fighter ambushed by a threat you never identified.'} Days 1–2 are crisis and day 3 brings the FRAGORD.</p>
   <div class="row"><button class="btn primary" id="closehelp">Got it</button></div></div></div>`}
+function helpModalMed(){return `<div class="overlay" id="ov"><div class="modal" role="dialog" aria-label="How to play">
+  <h2>Playing MEDCOM</h2>
+  <ol class="steps">
+    <li><b>Hospitals:</b> stand up hospitals at the four MOBs. Each task needs its people (PAX) and pallets (PP) delivered, plus its prerequisites. Task 4 opens a hospital. Triage (3) plus a cure task lets it treat: 7 for Green, 6 for Yellow, 2 for Red.</li>
+    <li><b>MEDCOM ATO:</b> each day the CFACC gives you a C-5, some C-17s and some C-130s. Fly kits from JBPHH on Cargo lines. The aircraft then needs a turn to fly back. Fly MEDEVAC lines (C-17 or C-130) from a hospital to a FOS and on to an open hospital. Each leg must be within range, and each MEDEVAC uses 1 bandage, pharmaceutical, IV and oxygen.</li>
+    <li><b>Patients:</b> MEDCOM events cause casualties in crisis, and PLA missile strikes cause many more in conflict. Waiting patients get worse every 2 turns, and Black patients die. Use the HH-60 from Task 6 to CASEVAC downed pilots within 3 hexes.</li>
+    <li><b>Supplies:</b> sealift brings 4 bandages, pharmaceuticals, IVs and oxygen each day. Each day ends with a tax of 1 of every supply, and any shortfall is +5 DP. You can send one TRANSCOM request per day.</li>
+  </ol>
+  <p class="help">MEDCOM VP: +1 per patient returned to duty, +1 per CASEVAC rescue, and +1 more when that pilot lands at a hospital with Tasks 3 and 6. DP: +1 per death, +1 per captured pilot, +5 per missed tax. Net is VP minus 1 for every 5 DP. The four MOBs and the CSpOC are computer-run.</p>
+  <div class="row"><button class="btn primary" id="closehelp">Got it</button></div></div></div>`}
 function overModalTheater(){const net=mpNet(),tgt=goal();const lostF=Object.values(G.ai).reduce((n,a)=>n+(a.lostF||0),0);const ready=Object.values(G.ai).reduce((n,a)=>n+a.fos.filter(f=>f.prog>=10).length,0);
   return `<div class="overlay" id="ov2"><div class="modal" role="dialog" aria-label="Campaign result">
   <h2>${net>=tgt?'Victory':'Defeat'}: ${net} net MP of ${tgt}</h2>
-  <div class="tbl"><table><tbody><tr><td>Theater mission points</td><td class="mono">${G.mp}</td></tr><tr><td>Demoralization points</td><td class="mono">${G.dp} (−${Math.floor(G.dp/5)} MP)</td></tr>
-  ${G.role==='caoc'?`<tr><td>ATO calls right</td><td class="mono">${G.acc.ok} of ${G.acc.ok+G.acc.bad}</td></tr>`:`<tr><td>PLA targets identified</td><td class="mono">${G.space.ident}</td></tr><tr><td>CCIRs answered</td><td class="mono">${G.acc.ccir}</td></tr><tr><td>US satellites lost</td><td class="mono">${G.space.lost}</td></tr>`}
+  <div class="tbl"><table><tbody><tr><td>${G.role==='medcom'?'MEDCOM victory points':'Theater mission points'}</td><td class="mono">${G.mp}</td></tr><tr><td>Demoralization points</td><td class="mono">${G.dp} (−${Math.floor(G.dp/5)} MP)</td></tr>
+  ${G.role==='medcom'?`<tr><td>Patients returned to duty</td><td class="mono">${G.med.treated} (${G.med.air} in the air)</td></tr><tr><td>Deaths</td><td class="mono">${G.med.died}</td></tr><tr><td>CASEVAC rescues</td><td class="mono">${G.med.rescued}${G.med.captured?` · ${G.med.captured} captured`:''}</td></tr><tr><td>MEDEVAC flights</td><td class="mono">${G.med.evacs}</td></tr><tr><td>Hospitals open</td><td class="mono">${Object.keys(MOBS).filter(hOpen).length} of 4</td></tr>`:G.role==='caoc'?`<tr><td>ATO calls right</td><td class="mono">${G.acc.ok} of ${G.acc.ok+G.acc.bad}</td></tr>`:`<tr><td>PLA targets identified</td><td class="mono">${G.space.ident}</td></tr><tr><td>CCIRs answered</td><td class="mono">${G.acc.ccir}</td></tr><tr><td>US satellites lost</td><td class="mono">${G.space.lost}</td></tr>`}
   <tr><td>Sorties flown</td><td class="mono">${G.sorties}</td></tr><tr><td>PLA targets destroyed</td><td class="mono">${G.kills}</td></tr><tr><td>Fighters lost</td><td class="mono">${lostF}</td></tr><tr><td>FOS ready at the end</td><td class="mono">${ready} of 8</td></tr></tbody></table></div>
   <div class="row"><button class="btn" id="seelog">Review the log</button><button class="btn primary" id="again">New campaign</button></div></div></div>`}
 function bindTheater(){
@@ -881,13 +897,197 @@ function bindTheater(){
   const sl=$('#seelog');if(sl)sl.onclick=()=>{UI.ackOver=true;render()};
   const ag=$('#again');if(ag)ag.onclick=()=>{store.del('ops-campaign-v2');G=null;UI={tab:'fos',rfiPick:{}};render()};
   document.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>{UI.tab=b.dataset.tab;render()});
-  bindZoom();if(G.role==='cspoc')bindSpace();
+  bindZoom();if(G.role==='cspoc')bindSpace();if(G.role==='medcom')bindMed();
   document.querySelectorAll('[data-dec]').forEach(b=>b.onclick=()=>{const [k,id,v]=b.dataset.dec.split('|');const L=(k==='air'?G.lines:G.flines).find(x=>x.id==id);L.dec=L.dec===v?null:v;save();render()});
   const oa=$('#okall');if(oa)oa.onclick=()=>{G.lines.forEach(L=>{if(!L.dec)L.dec='ok'});save();render()};
   const fa=$('#fokall');if(fa)fa.onclick=()=>{G.flines.forEach(L=>{if(!L.dec)L.dec='ok'});save();render()};
   document.querySelectorAll('[data-appo]').forEach(inp=>inp.onchange=()=>{const [m,t]=inp.dataset.appo.split('|');G.appo[m][t]=Math.max(0,Math.min(G.pool[t],parseInt(inp.value)||0));
     const tot=Object.values(G.appo).reduce((n,x)=>n+x[t],0);if(tot>G.pool[t])G.appo[m][t]-=tot-G.pool[t];genLines();save();render()});
 }
+
+/* =================== MEDCOM ROLE (hospitals, MEDEVAC, CASEVAC; the 4 MOBs are computer-run) =================== */
+/* Per-task people and pallet positions are read from the AFMEDCOM board photo, so treat them as estimates. */
+const HOSP_TASKS={
+  1:{n:'Blood Support',pax:3,pp:12,pre:[15,16],fx:'Blood for surgery (needed by Task 2)'},
+  2:{n:'Battlefield Surgery',pax:10,pp:3,pre:[1],fx:'Cures Red (Immediate)'},
+  3:{n:'Triage Team',pax:3,pp:5,pre:[13,15],fx:'Sorts patients. No treatment without it'},
+  4:{n:'Battlefield Hospital',pax:0,pp:14,pre:[],fx:'Opens the hospital: 5 Green, 5 Yellow, 5 Red beds'},
+  5:{n:'Delayed Bedspace',pax:0,pp:12,pre:[15],fx:'+10 Yellow beds'},
+  6:{n:'Medic Response',pax:6,pp:10,pre:[],fx:'Cures Yellow (Delayed). Brings the HH-60 for CASEVAC'},
+  7:{n:'Minimal Care',pax:5,pp:4,pre:[],fx:'Cures Green (Minimal)'},
+  8:{n:'Minimal Bedspace',pax:0,pp:12,pre:[15],fx:'+10 Green beds'},
+  9:{n:'Flight Surgeon',pax:2,pp:5,pre:[],fx:'With 10, 11 and 12: Green patients are treated in the air'},
+  10:{n:'Flight Nurse',pax:3,pp:5,pre:[],fx:'With 9, 11 and 12: Green patients are treated in the air'},
+  11:{n:'Medical Service Corps',pax:4,pp:0,pre:[],fx:'Prerequisite for 12, 15 and 16'},
+  12:{n:'Aeromedical Supply',pax:0,pp:4,pre:[11,15],fx:'With 9, 10 and 11: Green patients are treated in the air'},
+  13:{n:'Mortuary Affairs',pax:6,pp:8,pre:[],fx:'Prerequisite for triage'},
+  14:{n:'Mortuary Services',pax:2,pp:12,pre:[],fx:'+10 capacity (this game adds 10 Red beds)'},
+  15:{n:'Medical Logistics',pax:4,pp:6,pre:[11],fx:'Prerequisite for 1, 3, 5, 8 and 12'},
+  16:{n:'War Reserve Material',pax:4,pp:16,pre:[11],fx:'Prerequisite for 1'}};
+const PAT={G:{n:'Green',l:'Minimal',days:1,cure:7,col:'#2a9d4b'},Y:{n:'Yellow',l:'Delayed',days:2,cure:6,col:'#e0a400'},R:{n:'Red',l:'Immediate',days:3,cure:2,col:'#c1121f'},B:{n:'Black',l:'Expectant',days:0,cure:0,col:'#222'}};
+const WORSE={G:'Y',Y:'R',R:'B'};
+const SUP={band:'Bandages',pharm:'Pharmaceuticals',iv:'IV fluid',oxy:'Oxygen',blood:'Blood',ppe:'Surgical PPE',fuel:'Fuel'};
+const EVAC_SUP=['band','pharm','iv','oxy'];
+const EVAC_CAP={'C-130':15,'C-17':30};
+const MED_CS=['DUSTOFF','ANGEL','MERCY','REACH','EVAC','LIFELINE'];
+const H=m=>G.med.hosp[m];
+const hDone=(m,t)=>H(m).done.includes(+t);
+const hOpen=m=>hDone(m,4);
+function hBeds(m){const h=H(m);if(!hOpen(m))return {G:0,Y:0,R:0};return {G:5+(hDone(m,8)?10:0),Y:5+(hDone(m,5)?10:0),R:5+(hDone(m,14)?10:0)}}
+function hUsed(m,c){return H(m).bed.filter(p=>p.c===c).length}
+const canTreat=(m,c)=>hDone(m,3)&&PAT[c].cure&&hDone(m,PAT[c].cure)&&(c!=='R'||hDone(m,1));
+const airTreat=m=>[9,10,11,12].every(t=>hDone(m,t));
+function hNeed(m,t){const T=HOSP_TASKS[t],g=H(m).got[t]||{pax:0,pp:0};return {pax:Math.max(0,T.pax-g.pax),pp:Math.max(0,T.pp-g.pp)}}
+function allFos(){return Object.keys(MOBS).flatMap(m=>G.ai[m].fos.map(f=>({m,f})))}
+function medFos(n){const x=allFos().find(o=>o.f.num===+n);return x&&x.f}
+function rollColor(){const r=d(10);return r<=4?'G':r<=7?'Y':r<=9?'R':'B'}
+function addCas(fosNum,n,why){const L=G.med.cas[fosNum]||(G.med.cas[fosNum]=[]);const tally={G:0,Y:0,R:0,B:0};
+  for(let i=0;i<n;i++){const c=rollColor();tally[c]++;L.push({c,age:0})}
+  log('bad',`${why}: ${n} casualties at FOS ${fosNum} (${Object.entries(tally).filter(([,v])=>v).map(([k,v])=>`${v} ${PAT[k].n}`).join(', ')}). MEDEVAC them to an open hospital.`)}
+function casCount(n){return (G.med.cas[n]||[]).length}
+function medInit(){
+  const hosp={};Object.keys(MOBS).forEach(m=>hosp[m]={done:[],got:{},bed:[],hall:[],helo:false,heloLost:false,heloGot:0});
+  G.med={hosp,sup:{band:4,pharm:4,iv:4,oxy:4,blood:3,ppe:3,fuel:3},fleet:[],cas:{},downed:[],tc:[],tcDay:0,treated:0,air:0,died:0,rescued:0,captured:0,evacs:0,seq:1,cs:0};
+  medFleet()}
+function medFleet(){const M=G.med,old=M.fleet||[];const n17=2+(d(4)>=3?1:0),n130=2+(d(4)>=3?1:0);const list=[['C-5',1],['C-17',n17],['C-130',n130]];
+  M.fleet=[];list.forEach(([type,n])=>{for(let i=0;i<n;i++){M.cs++;M.fleet.push({id:M.seq++,type,cs:`${MED_CS[M.cs%MED_CS.length]} ${10+M.cs}`,busy:0,mis:null})}});
+  log('acc',`CFACC allocates MEDCOM ${n17} C-17s, ${n130} C-130s and a C-5 for day ${day()}.`)}
+/* ---------- loads ---------- */
+function medCfg(a){const cs=AC[a.type].cfg;return cs.find(c=>c.n===(a.mis&&a.mis.cfg))||cs[0]}
+function medLoad(a){const mis=a.mis;if(!mis||mis.k!=='cargo'||!mis.to)return {pp:0,pax:0,items:[]};const c=medCfg(a);let pp=0,pax=0;const items=[];
+  const others=G.med.fleet.filter(b=>b!==a&&b.mis&&b.mis.k==='cargo'&&b.mis.to===mis.to&&G.med.fleet.indexOf(b)<G.med.fleet.indexOf(a));
+  const claimed={};others.forEach(b=>medLoad(b).items.forEach(it=>{const k=it.t;claimed[k]=claimed[k]||{pax:0,pp:0};claimed[k].pax+=it.pax;claimed[k].pp+=it.pp}));
+  (mis.tasks||[]).forEach(t=>{let need;if(t==='helo'){need={pax:0,pp:Math.max(0,8-H(mis.to).heloGot)}}else need=hNeed(mis.to,t);const cl=claimed[t]||{pax:0,pp:0};
+    const rp=Math.max(0,need.pp-cl.pp),rx=Math.max(0,need.pax-cl.pax);const gp=Math.min(rp,c.pp-pp),gx=Math.min(rx,c.pax-pax);
+    if(gp>0||gx>0){pp+=gp;pax+=gx;items.push({t,pp:gp,pax:gx,full:gp>=rp&&gx>=rx})}else if(rp||rx)items.push({t,pp:0,pax:0,full:false})});
+  return {pp,pax,items,cfg:c}}
+function evacCheck(a){const mis=a.mis,out=[];if(!mis||mis.k!=='evac')return out;
+  if(!mis.from||!mis.fos||!mis.to){out.push('Pick a base, a FOS and a hospital.');return out}
+  const f=medFos(mis.fos),R=AC[a.type].range,d1=hexDist(MOBS[mis.from].hex,f.hex),d2=hexDist(f.hex,MOBS[mis.to].hex);
+  if(d1>R)out.push(`${MOBS[mis.from].n} to FOS ${f.num} is ${d1} hexes, beyond ${a.type} range (${R}).`);
+  if(d2>R)out.push(`FOS ${f.num} to ${MOBS[mis.to].n} is ${d2} hexes, beyond ${a.type} range (${R}).`);
+  if(!hOpen(mis.to))out.push(`${MOBS[mis.to].n} hospital isn't open (Task 4).`);
+  if(G.access[fosCountry(f.num)]===false)out.push(`${fosCountry(f.num)} has denied access, so FOS ${f.num} is closed.`);
+  return out}
+/* ---------- execution ---------- */
+function medResolve(){const M=G.med;const used={band:0,pharm:0,iv:0,oxy:0};
+  M.fleet.forEach(a=>{if(a.busy){a.busy--;a.mis=null;return}const mis=a.mis;if(!mis)return;
+    if(mis.k==='cargo'){if(!mis.to)return;const ld=medLoad(a);if(!ld.pp&&!ld.pax){log('acc',`${a.cs} (${a.type}) has nothing to carry to ${MOBS[mis.to].n} and stays at JBPHH.`);return}
+      const h=H(mis.to);ld.items.forEach(it=>{if(it.t==='helo'){h.heloGot+=it.pp;if(h.heloGot>=8){h.helo=true;h.heloLost=false;h.heloGot=0;log('ok',`A replacement HH-60 reaches ${MOBS[mis.to].n}.`)}return}
+        const g=h.got[it.t]||(h.got[it.t]={pax:0,pp:0});g.pax+=it.pax;g.pp+=it.pp});
+      a.busy=1;log('ok',`${a.cs} (${a.type}, ${ld.cfg.n}) flies JBPHH to ${MOBS[mis.to].n}: ${ld.pp} PP + ${ld.pax} PAX for ${ld.items.filter(i=>i.pp||i.pax).map(i=>i.t==='helo'?'HH-60':`Task ${i.t}`).join(', ')}. It needs the next turn to fly back.`)}
+    else if(mis.k==='evac'){const errs=evacCheck(a);if(errs.length){log('bad',`${a.cs} MEDEVAC scrubbed: ${errs[0]}`);return}
+      const f=medFos(mis.fos);if(stormBlocks(f)){log('bad',`${a.cs} MEDEVAC scrubbed: typhoon over GEO zone ${zoneOfFos(f.num)}.`);return}
+      if(EVAC_SUP.some(k=>M.sup[k]-used[k]<1)){log('bad',`${a.cs} MEDEVAC scrubbed: each MEDEVAC flight needs 1 bandage, pharmaceutical, IV and oxygen, and you're out.`);return}
+      EVAC_SUP.forEach(k=>used[k]++);M.evacs++;
+      const L=M.cas[f.num]||[];const ord={R:0,Y:1,G:2,B:3};L.sort((x,y)=>ord[x.c]-ord[y.c]);const take=L.splice(0,EVAC_CAP[a.type]);
+      if(!take.length){log('acc',`${a.cs} MEDEVAC reaches FOS ${f.num} but nobody is waiting. Supplies used anyway.`);return}
+      let inAir=0;const land=[];take.forEach(p=>{if(p.c==='G'&&airTreat(mis.from)){inAir++;M.treated++;M.air++;G.mp++}else land.push(p)});
+      land.forEach(p=>admit(mis.to,p));
+      log('ok',`${a.cs} (${a.type} MEDEVAC) lifts ${take.length} patient${take.length===1?'':'s'} from FOS ${f.num} to ${MOBS[mis.to].n}${inAir?`. ${inAir} Green treated in the air: +${inAir} MP`:''}.`)}});
+  EVAC_SUP.forEach(k=>M.sup[k]-=used[k]);
+  M.downed.filter(p=>p.go).forEach(p=>{const m=p.go;p.go=null;const h=H(m);
+    if(!h.helo||M.sup.fuel<1){log('bad',`CASEVAC from ${MOBS[m].n} can't launch: ${!h.helo?'no HH-60 there':'no fuel'}.`);return}
+    if(hexDist(MOBS[m].hex,p.hex)>3){log('bad',`CASEVAC from ${MOBS[m].n} can't reach hex ${hexLabel(p.hex)} (beyond 3 hexes).`);return}
+    M.sup.fuel--;const threat=(G.pla[p.hex]||[]).some(t=>t.s!=='sj'&&t.s!=='aj');
+    if(threat){const a=d(20),b=d(12);if(b>=a){h.helo=false;h.heloLost=true;log('bad',`PLA forces in hex ${hexLabel(p.hex)} engage the HH-60 (MEDCOM d20: ${a}, PRC d12: ${b}). It's lost and goes back to JBPHH. Fly 8 PP to ${MOBS[m].n} to replace it.`);return}
+      log('ok',`The HH-60 survives the risk roll in hex ${hexLabel(p.hex)} (${a} vs ${b}).`)}
+    M.downed.splice(M.downed.indexOf(p),1);M.rescued++;G.mp++;let extra='';if(hDone(m,3)&&hDone(m,6)){G.mp++;M.treated++;extra=' The pilot is treated at the hospital: +1 more.'}
+    log('ok',`CASEVAC rescues the downed ${p.ft} pilot from hex ${hexLabel(p.hex)} to ${MOBS[m].n}: +1 MP.${extra}`)});
+}
+function admit(m,p){const b=hBeds(m);if(p.c!=='B'&&hUsed(m,p.c)<b[p.c])H(m).bed.push({c:p.c,left:PAT[p.c].days,age:0});else H(m).hall.push({c:p.c,age:0})}
+function die(n,where){if(!n)return;G.med.died+=n;G.dp+=n;log('bad',`${n} expectant patient${n===1?'':'s'} die${n===1?'s':''} ${where}: +${n} DP.`)}
+function medTreat(){const M=G.med;
+  Object.keys(MOBS).forEach(m=>{const h=H(m);let done=0,blk=0;
+    h.bed=h.bed.filter(p=>{if(canTreat(m,p.c)){p.left--;if(p.left<=0){done++;return false}return true}
+      p.age++;if(p.age>=2){p.age=0;const n=WORSE[p.c];if(n==='B'){blk++;return false}p.c=n;p.left=PAT[n].days;if(hUsed(m,n)>=hBeds(m)[n]){h.hall.push({c:n,age:0});return false}}return true});
+    if(done){M.treated+=done;G.mp+=done;log('ok',`${MOBS[m].n} hospital returns ${done} patient${done===1?'':'s'} to duty: +${done} MP.`)}
+    const hall=h.hall;h.hall=[];let black=0;
+    hall.forEach(p=>{if(p.c==='B'){black++;return}const b=hBeds(m);if(hUsed(m,p.c)<b[p.c]){h.bed.push({c:p.c,left:PAT[p.c].days,age:0});return}
+      p.age++;if(p.age>=1){const n=WORSE[p.c];if(n==='B'){black++;return}p.c=n;p.age=0}h.hall.push(p)});
+    die(black+blk,`at ${MOBS[m].n}`)});
+  Object.keys(M.cas).forEach(n=>{let black=0;M.cas[n]=M.cas[n].filter(p=>{if(p.c==='B'){black++;return false}p.age++;if(p.age>=2){p.age=0;p.c=WORSE[p.c]}return true});die(black,`waiting at FOS ${n}`)});
+  M.downed=M.downed.filter(p=>{p.age=(p.age||0)+1;if(p.age>3){M.captured++;G.dp++;log('bad',`The ${p.ft} pilot down in hex ${hexLabel(p.hex)} is captured: +1 DP.`);return false}return true});
+}
+function medComplete(){let any=true;while(any){any=false;Object.keys(MOBS).forEach(m=>{const h=H(m);Object.keys(HOSP_TASKS).forEach(t=>{t=+t;if(h.done.includes(t))return;const T=HOSP_TASKS[t],g=h.got[t];if(!g||g.pax<T.pax||g.pp<T.pp)return;
+  if(!T.pre.every(p=>h.done.includes(p)))return;h.done.push(t);any=true;if(t===6){h.helo=true}log('ok',`${MOBS[m].n} hospital completes Task ${t} ${T.n}. ${T.fx}.`)})})}}
+function medDayEnd(){const M=G.med,miss=Object.keys(SUP).filter(k=>M.sup[k]<1);Object.keys(SUP).forEach(k=>M.sup[k]=Math.max(0,M.sup[k]-1));
+  if(miss.length){G.dp+=5;log('bad',`MEDCOM tax: short of ${miss.map(k=>SUP[k].toLowerCase()).join(', ')}. +5 DP.`)}else log('acc','MEDCOM pays the daily tax: 1 each of blood, PPE, bandages, IV, oxygen, fuel and pharmaceuticals.')}
+const MED_EVENTS=[
+  {n:'Vehicle rollover',cas:[2,4],t:'A convoy accident'},{n:'Heat casualties',cas:[3,6],t:'Heat injuries on the flight line'},
+  {n:'Hard landing',cas:[2,5],t:'A C-130 hard landing'},{n:'Fuel fire',cas:[3,5],t:'A refueling fire'},
+  {n:'Spoiled blood',sup:['blood',-2],t:'A refrigeration failure spoils 2 blood supplies.'},
+  {n:'Host nation donation',sup:['iv',2],t:'The host nation donates 2 IV fluid supplies.'},
+  {n:'Contaminated PPE',sup:['ppe',-1],t:'A PPE lot fails inspection: −1 surgical PPE.'},
+  {n:'Medical surge',cas:[4,7],t:'A barracks outbreak'}];
+function medEvent(){const e=pick(MED_EVENTS);
+  if(e.cas){const fs=allFos().filter(o=>G.access[fosCountry(o.f.num)]!==false&&o.f.prog>0);const o=pick(fs.length?fs:allFos());addCas(o.f.num,e.cas[0]+d(e.cas[1]-e.cas[0]+1)-1,`MEDCOM event, ${e.n}. ${e.t}`)}
+  else{const [k,v]=e.sup;G.med.sup[k]=Math.max(0,G.med.sup[k]+v);log(v<0?'bad':'ok',`MEDCOM event, ${e.n}. ${e.t}`)}}
+function medNewTurn(){const M=G.med;
+  M.tc=M.tc.filter(x=>{if(x.t<=G.turn){Object.entries(x.items).forEach(([k,v])=>M.sup[k]+=v);log('ok',`TRANSCOM delivers MEDCOM supplies: ${Object.entries(x.items).map(([k,v])=>`${v} ${SUP[k].toLowerCase()}`).join(', ')}.`);return false}return true});
+  if(G.turn%turnsPerDay===1){if(G.exord==='sealift'&&day()===2)log('bad','Sealift is delayed: no MEDCOM resupply today.');else{EVAC_SUP.forEach(k=>M.sup[k]+=4);log('ok','Sealift brings MEDCOM 4 bandages, pharmaceuticals, IVs and oxygen.')}medFleet();}
+  if(G.turn%2===1)medEvent();}
+function medTC(kind){const M=G.med;if(M.tcDay===day())return;M.tcDay=day();const items=kind==='evac'?{band:4,pharm:4,iv:4,oxy:4}:{blood:3,ppe:3,fuel:3};M.tc.push({t:G.turn+2,items});
+  log('acc',`TRANSCOM request sent: ${Object.entries(items).map(([k,v])=>`${v} ${SUP[k].toLowerCase()}`).join(', ')}. Arrives turn ${G.turn+2}.`)}
+/* ---------- UI ---------- */
+function bedRow(m){const b=hBeds(m),h=H(m);return ['G','Y','R'].map(c=>`<span class="pill" style="border-color:${PAT[c].col}"><b style="color:${PAT[c].col}">●</b> ${hUsed(m,c)}/${b[c]}</span>`).join(' ')+(h.hall.length?` <span class="pill bad">${h.hall.length} without a bed</span>`:'')}
+function hospPanel(){
+  let h=`<div class="stack"><p class="help">Stand up four hospitals at Kadena, Andersen, Yokota and Osan. A task completes when all of its people and pallets have landed and its prerequisites are done. Task 4 opens the hospital. Patients are only treated with <b>Triage (3)</b> plus the cure task for their color: Green needs 7, Yellow needs 6, Red needs 2 (and 2 needs Blood, Task 1). Treatment takes 1, 2 or 3 turns. Untreated patients get worse every 2 turns, Black patients die after 1 turn, and each death is +1 DP.</p>`;
+  Object.keys(MOBS).forEach(m=>{const H0=H(m);const n=H0.done.length;
+    h+=`<div class="fos"><div class="fos-head"><b><span style="color:${MOB_COLOR[m]}">■</span> ${MOBS[m].n} hospital</b><span class="small muted">${n}/16 tasks · ${hOpen(m)?'open':'not open'}${H0.helo?' · HH-60 ready':H0.heloLost?' · HH-60 lost':''}${airTreat(m)?' · treats Green in the air':''}</span></div>
+    <div class="row small">${bedRow(m)} <span class="muted">treats:</span> ${['G','Y','R'].filter(c=>canTreat(m,c)).map(c=>`<b style="color:${PAT[c].col}">${PAT[c].n}</b>`).join(', ')||'<span class="muted">nothing yet</span>'}</div>
+    <div class="tasks">${Object.keys(HOSP_TASKS).map(t=>{const T=HOSP_TASKS[t],done=H0.done.includes(+t),g=H0.got[t]||{pax:0,pp:0},pre=T.pre.filter(p=>!H0.done.includes(p));
+      const st=done?'done':(g.pax>=T.pax&&g.pp>=T.pp)?'site':'';
+      return `<div class="task ${st}" title="${esc(T.fx)}${T.pre.length?` · needs ${T.pre.join(', ')}`:''}"><b>${t}</b> ${esc(T.n)}<br><span class="muted">${done?'done':`${g.pax}/${T.pax} PAX · ${g.pp}/${T.pp} PP${pre.length?` · needs ${pre.join(',')}`:''}`}</span></div>`}).join('')}</div></div>`});
+  return h+'</div>';
+}
+function matoPanel(){const M=G.med;
+  let h=`<div class="stack"><p class="help">MEDCOM kits start at JBPHH. A C-5 or C-17 on a <b>Cargo</b> line flies kits to a hospital and needs the next turn to fly back. A C-17 or C-130 on a <b>MEDEVAC</b> line flies from a hospital base to a FOS and on to an open hospital. Each leg must be within range (C-130 3, C-17 4). Litters: C-130 15, C-17 30. Each MEDEVAC flight uses 1 bandage, pharmaceutical, IV and oxygen. An aircraft flies Cargo or MEDEVAC, never both.</p>
+  <div class="row small"><b>Supplies:</b> ${Object.keys(SUP).map(k=>`<span class="pill ${M.sup[k]<1?'bad':''}">${SUP[k]} ${M.sup[k]}</span>`).join(' ')}</div>`;
+  M.fleet.forEach(a=>{const mis=a.mis||{};const can=a.type==='C-5'?['cargo']:a.type==='C-130'?['evac']:['cargo','evac'];
+    h+=`<div class="ac"><div class="row" style="justify-content:space-between"><b class="mono">${esc(a.cs)} · ${a.type}</b>${a.busy?'<span class="pill">flying back to JBPHH</span>':`<select data-mmis="${a.id}" aria-label="${esc(a.cs)} mission"><option value="">Idle</option>${can.map(k=>`<option value="${k}" ${mis.k===k?'selected':''}>${k==='cargo'?'Cargo from JBPHH':'MEDEVAC'}</option>`).join('')}</select>`}</div>`;
+    if(!a.busy&&mis.k==='cargo'){const ld=medLoad(a),c=ld.cfg||medCfg(a);
+      h+=`<div class="row small"><label>To <select data-mto="${a.id}" aria-label="Destination"><option value="">choose</option>${Object.keys(MOBS).map(m=>`<option value="${m}" ${mis.to===m?'selected':''}>${MOBS[m].n}</option>`).join('')}</select></label>
+      <label>Config <select data-mcfg="${a.id}" aria-label="Config">${AC[a.type].cfg.map(x=>`<option ${c.n===x.n?'selected':''}>${x.n}</option>`).join('')}</select></label><span>${c.pp} PP + ${c.pax} PAX · loaded <b>${ld.pp} PP + ${ld.pax} PAX</b></span></div>`;
+      if(mis.to){const open=Object.keys(HOSP_TASKS).filter(t=>!hDone(mis.to,t)&&(hNeed(mis.to,t).pax||hNeed(mis.to,t).pp));if(H(mis.to).heloLost)open.push('helo');
+        h+=`<div class="loadlist small">${open.map(t=>{const nd=t==='helo'?{pax:0,pp:8-H(mis.to).heloGot}:hNeed(mis.to,t);const it=ld.items.find(i=>i.t===t);const on=(mis.tasks||[]).includes(t);
+          return `<label class="row" style="justify-content:space-between"><span><input type="checkbox" data-mtask="${a.id}|${t}" ${on?'checked':''}> ${t==='helo'?'HH-60 replacement':`Task ${t} ${esc(HOSP_TASKS[t].n)}`} <span class="muted">needs ${nd.pax} PAX + ${nd.pp} PP</span></span><span class="mono">${on?(it&&(it.pp||it.pax)?`${it.pax}+${it.pp}${it.full?' ✓':' partial'}`:'no room'):''}</span></label>`}).join('')||'<span class="muted">Every task here is fully shipped.</span>'}</div>`}}
+    if(!a.busy&&mis.k==='evac'){const errs=evacCheck(a);const fs=allFos();
+      h+=`<div class="row small"><label>Base <select data-mfrom="${a.id}" aria-label="Base"><option value="">choose</option>${Object.keys(MOBS).map(m=>`<option value="${m}" ${mis.from===m?'selected':''}>${MOBS[m].n}</option>`).join('')}</select></label>
+      <label>Pick up at <select data-mfos="${a.id}" aria-label="FOS"><option value="">choose</option>${fs.map(o=>`<option value="${o.f.num}" ${+mis.fos===o.f.num?'selected':''}>FOS ${o.f.num} (${casCount(o.f.num)} waiting${mis.from?`, ${hexDist(MOBS[mis.from].hex,o.f.hex)} hex`:''})</option>`).join('')}</select></label>
+      <label>To <select data-mdest="${a.id}" aria-label="Hospital"><option value="">choose</option>${Object.keys(MOBS).map(m=>`<option value="${m}" ${mis.to===m?'selected':''}>${MOBS[m].n}${hOpen(m)?'':' (closed)'}${mis.fos?`, ${hexDist(medFos(mis.fos).hex,MOBS[m].hex)} hex`:''}</option>`).join('')}</select></label></div>
+      <div class="small">${errs.length?errs.map(e=>`<span style="color:var(--bad)">✗ ${esc(e)}</span>`).join('<br>'):`<span style="color:var(--ok)">✓ Legal. Lifts up to ${EVAC_CAP[a.type]} litters${airTreat(mis.from)?'. Green patients are treated in the air':''}.</span>`}</div>`}
+    h+='</div>'});
+  return h+'</div>';
+}
+function patPanel(){const M=G.med;
+  let h=`<div class="stack"><p class="help">Casualties wait at FOS until a MEDEVAC picks them up, worsening one color every 2 turns. In conflict, PLA missile strikes on FOS cause casualties, and every MOB fighter lost leaves a downed pilot. An HH-60 (Task 6) can fly a CASEVAC up to 3 hexes for 1 fuel. If the pilot's hex holds PLA forces, MEDCOM rolls d20 against the PRC's d12. A pilot not rescued in 3 turns is captured (+1 DP).</p>`;
+  const rows=Object.entries(M.cas).filter(([,L])=>L.length);
+  h+=`<h3>Waiting at FOS</h3>${rows.length?`<div class="tbl"><table><thead><tr><th>FOS</th><th>Hex</th>${['R','Y','G','B'].map(c=>`<th style="color:${PAT[c].col}">${PAT[c].n}</th>`).join('')}</tr></thead><tbody>${rows.map(([n,L])=>`<tr><td>FOS ${n}</td><td class="mono">${hexLabel(medFos(n).hex)}</td>${['R','Y','G','B'].map(c=>`<td class="mono">${L.filter(p=>p.c===c).length}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`:'<p class="muted small">No casualties waiting.</p>'}`;
+  h+=`<h3>Downed pilots</h3>`;
+  if(!M.downed.length)h+='<p class="muted small">None.</p>';
+  M.downed.forEach(p=>{const ok=Object.keys(MOBS).filter(m=>H(m).helo&&hexDist(MOBS[m].hex,p.hex)<=3);const threat=(G.pla[p.hex]||[]).some(t=>t.s!=='sj'&&t.s!=='aj'&&t.id>0);
+    h+=`<div class="ac small"><b>${p.ft} pilot · hex ${hexLabel(p.hex)}</b> · down ${p.age||0} turn${p.age===1?'':'s'}${threat?' · <b style="color:var(--bad)">PLA contacts in hex</b>':''}<div class="row">${ok.length?ok.map(m=>`<button class="btn sm ${p.go===m?'primary':''}" data-casevac="${p.id}|${m}">CASEVAC from ${MOBS[m].n} (${hexDist(MOBS[m].hex,p.hex)} hex)</button>`).join(''):'<span class="muted">No HH-60 within 3 hexes.</span>'}</div></div>`});
+  h+=`<h3>TRANSCOM</h3><p class="small muted">One request per day. It arrives 2 turns later. The daily tax takes 1 of each supply, and any shortfall is +5 DP.</p>
+  <div class="row">${M.tcDay===day()?'<span class="small">Today\'s request is in.</span>':'<button class="btn sm" data-medtc="evac">Request MEDEVAC supplies (+4 bandage, pharma, IV, oxygen)</button><button class="btn sm" data-medtc="sus">Request blood, PPE, fuel (+3 each)</button>'}</div>`;
+  return h+'</div>';
+}
+function bindMed(){const M=G.med;const ac=id=>M.fleet.find(a=>a.id==id);const up=()=>{save();render()};
+  document.querySelectorAll('[data-mmis]').forEach(s=>s.onchange=()=>{const a=ac(s.dataset.mmis);a.mis=s.value?{k:s.value,tasks:[],cfg:AC[a.type].cfg[a.type==='C-17'?1:0].n}:null;up()});
+  document.querySelectorAll('[data-mto]').forEach(s=>s.onchange=()=>{const a=ac(s.dataset.mto);a.mis.to=s.value||null;a.mis.tasks=[];up()});
+  document.querySelectorAll('[data-mcfg]').forEach(s=>s.onchange=()=>{ac(s.dataset.mcfg).mis.cfg=s.value;up()});
+  document.querySelectorAll('[data-mtask]').forEach(c=>c.onchange=()=>{const [id,t]=c.dataset.mtask.split('|');const a=ac(id);const L=a.mis.tasks;if(c.checked){if(!L.includes(t))L.push(t)}else a.mis.tasks=L.filter(x=>x!==t);up()});
+  document.querySelectorAll('[data-mfrom]').forEach(s=>s.onchange=()=>{ac(s.dataset.mfrom).mis.from=s.value||null;up()});
+  document.querySelectorAll('[data-mfos]').forEach(s=>s.onchange=()=>{ac(s.dataset.mfos).mis.fos=s.value?+s.value:null;up()});
+  document.querySelectorAll('[data-mdest]').forEach(s=>s.onchange=()=>{ac(s.dataset.mdest).mis.to=s.value||null;up()});
+  document.querySelectorAll('[data-casevac]').forEach(b=>b.onclick=()=>{const [id,m]=b.dataset.casevac.split('|');const p=M.downed.find(x=>x.id==id);p.go=p.go===m?null:m;up()});
+  document.querySelectorAll('[data-medtc]').forEach(b=>b.onclick=()=>{medTC(b.dataset.medtc);up()});
+}
+function medMapSVG(){let s='';const M=G.med;
+  Object.keys(MOBS).forEach(m=>{const {x,y}=hexXY(MOBS[m].hex);const open=hOpen(m);s+=`<g><rect x="${x-11}" y="${y+14}" width="22" height="16" rx="3" fill="${open?'#fff':'#555'}" stroke="#c1121f" stroke-width="2"/><text x="${x}" y="${y+26}" font-size="12" text-anchor="middle" fill="#c1121f" font-weight="bold">✚</text></g>`});
+  Object.entries(M.cas).forEach(([n,L])=>{if(!L.length)return;const f=medFos(n);const {x,y}=hexXY(f.hex);s+=`<g><circle cx="${x}" cy="${y-24}" r="11" fill="#c1121f" stroke="#fff" stroke-width="2"/><text x="${x}" y="${y-20}" font-size="11" text-anchor="middle" fill="#fff" font-family="monospace">${L.length}</text></g>`});
+  M.downed.forEach(p=>{const {x,y}=hexXY(p.hex);s+=`<g><circle cx="${x+18}" cy="${y+18}" r="10" fill="#ffd166" stroke="#10202a" stroke-width="2"/><text x="${x+18}" y="${y+22}" font-size="11" text-anchor="middle" fill="#10202a">⚑</text></g>`});
+  return s}
 
 /* =================== RENDER =================== */
 const $=s=>document.querySelector(s);
@@ -966,7 +1166,7 @@ function mapSVG(){
     s+=wide?`<circle cx="${x}" cy="${y}" r="${HEXR*1.85}" fill="none" stroke="#38d0f0" stroke-width="2" stroke-dasharray="3 5" opacity=".9"/>`:'';
     s+=`<g><rect x="${x-46}" y="${y-30}" width="${sat.code.length*7+8}" height="15" rx="2" fill="#063a4a" opacity=".9"/><text x="${x-42}" y="${y-19}" font-size="10" fill="#7fe6ff" font-family="monospace">${sat.code}</text></g>`});
   if(isTheater()){Object.keys(MOBS).forEach(m=>{const {x,y}=hexXY(MOBS[m].hex);s+=`<circle cx="${x}" cy="${y}" r="17" fill="none" stroke="${MOB_COLOR[m]}" stroke-width="5"/>`;
-      G.ai[m].fos.forEach((f,i)=>{const p=hexXY(f.hex);const ox=(i?14:-14)+(m==='Osan'||m==='Andersen'?6:0),oy=m==='Osan'||m==='Andersen'?12:-4;s+=`<g><rect x="${p.x+ox-15}" y="${p.y+oy-9}" width="30" height="17" rx="3" fill="${f.prog>=10?(f.down?'#7a1010':'#0d5c34'):'#10202a'}" stroke="${MOB_COLOR[m]}" stroke-width="2"/><text x="${p.x+ox}" y="${p.y+oy+4}" font-size="10" text-anchor="middle" fill="#fff" font-family="monospace">${f.num}${f.prog>=10?'✓':'·'+f.prog}</text></g>`})})}
+      G.ai[m].fos.forEach((f,i)=>{const p=hexXY(f.hex);const ox=(i?14:-14)+(m==='Osan'||m==='Andersen'?6:0),oy=m==='Osan'||m==='Andersen'?12:-4;s+=`<g><rect x="${p.x+ox-15}" y="${p.y+oy-9}" width="30" height="17" rx="3" fill="${f.prog>=10?(f.down?'#7a1010':'#0d5c34'):'#10202a'}" stroke="${MOB_COLOR[m]}" stroke-width="2"/><text x="${p.x+ox}" y="${p.y+oy+4}" font-size="10" text-anchor="middle" fill="#fff" font-family="monospace">${f.num}${f.prog>=10?'✓':'·'+f.prog}</text></g>`})});if(G.role==='medcom')s+=medMapSVG()}
   else{const {x,y}=hexXY(M.hex);s+=`<circle cx="${x}" cy="${y}" r="20" fill="none" stroke="#ffd166" stroke-width="4"/>`}
   G.fos.forEach(f=>{const {x,y}=hexXY(fosHex(f));const sel=UI.selFos===f.num;s+=`<circle cx="${x}" cy="${y}" r="${sel?28:24}" fill="none" stroke="#ff7b00" stroke-width="${sel?5:3}"/>`});
   const byHex={};G.aircraft.forEach(a=>{const h=locHex(a);(byHex[h]=byHex[h]||[]).push(a)});
@@ -1078,13 +1278,14 @@ function startScreen(){
   return `<div class="bar"><h1><small>Operation Pacific Shield · Kingfish ACE</small>Campaign</h1></div>
   <div class="card stack" style="max-width:860px">
     <h2>Choose your seat</h2>
-    <p class="help">Play a MOB commander, the CAOC or the CSpOC. Whatever you don't play is simulated: the other cells, the Game Master's dice, host nations and the PLA.</p>
+    <p class="help">Play the CAOC, the CSpOC, MEDCOM or a MOB commander. Whatever you don't play is simulated: the other cells, the Game Master's dice, host nations and the PLA.</p>
+    <div class="disclaimer" role="note"><b>Practice aid only.</b> This is an unofficial study tool, not the official OPS game. It simplifies the rules, and some numbers are estimates read from board photos. Your class rules, the OPS User Guide and your instructors' rulings take priority over anything here.</div>
     ${saved&&!saved.over?`<div class="row"><button class="btn primary" id="resume">Resume ${esc(saved.role&&saved.role!=='mob'?ROLES[saved.role].n:MOBS[saved.mob].n)} · day ${Math.ceil(saved.turn/4)} turn ${saved.turn}</button></div>`:''}
     <div class="choices">${Object.entries(ROLES).map(([k,r])=>`<button class="choice" data-role="${k}" aria-pressed="${role===k}"><b>${r.n}</b><span class="small muted">${esc(r.d)}</span></button>`).join('')}</div>
     ${role==='mob'?`<h3>Choose your MOB</h3>
     <div class="choices">${Object.entries(MOBS).map(([k,m])=>`<button class="choice" data-mob="${k}" aria-pressed="${UI.startMob===k}"><b>${m.n}</b><span class="small">${m.ft}s · hex ${m.hex}</span><br><span class="small muted">${esc(m.note)}</span></button>`).join('')}</div>`:''}
     <h3>Campaign length</h3>
-    <div class="choices">${Object.entries(LENGTHS).map(([k,l])=>`<button class="choice" data-len="${k}" aria-pressed="${UI.startLen===k}"><b>${l.label}</b><span class="small muted">${l.desc} Victory at ${role==='mob'?l.target:THEATER_TARGET[role][k]} net MP${role==='mob'?'':' for the theater'}.</span></button>`).join('')}</div>
+    <div class="choices">${Object.entries(LENGTHS).map(([k,l])=>`<button class="choice" data-len="${k}" aria-pressed="${UI.startLen===k}"><b>${l.label}</b><span class="small muted">${l.desc} Victory at ${role==='mob'?l.target:THEATER_TARGET[role][k]} ${role==='medcom'?'net MEDCOM VP':`net MP${role==='mob'?'':' for the theater'}`}.</span></button>`).join('')}</div>
     <div class="row"><button class="btn primary" id="start">Start campaign</button></div>
   </div>`;
 }
@@ -1186,7 +1387,7 @@ function bindStart(){
   document.querySelectorAll('[data-mob]').forEach(b=>b.onclick=()=>{UI.startMob=b.dataset.mob;render()});
   document.querySelectorAll('[data-len]').forEach(b=>b.onclick=()=>{UI.startLen=b.dataset.len;render()});
   document.querySelectorAll('[data-role]').forEach(b=>b.onclick=()=>{UI.startRole=b.dataset.role;render()});
-  $('#start').onclick=()=>{if(UI.startRole==='mob'){newGame(UI.startMob,UI.startLen);UI.tab='fos'}else{newTheaterGame(UI.startRole,UI.startLen);UI.tab=UI.startRole==='caoc'?'thr':'space'}UI.showHelp=true;render()};
+  $('#start').onclick=()=>{if(UI.startRole==='mob'){newGame(UI.startMob,UI.startLen);UI.tab='fos'}else{newTheaterGame(UI.startRole,UI.startLen);UI.tab=UI.startRole==='caoc'?'thr':UI.startRole==='medcom'?'hosp':'space'}UI.showHelp=true;render()};
   const r=$('#resume');if(r)r.onclick=()=>{G=store.get('ops-campaign-v2');render()};
 }
 function bind(){
