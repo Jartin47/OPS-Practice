@@ -5,7 +5,15 @@
   var GOATCOUNTER_CODE = 'jartin47';   // your GoatCounter site code, e.g. 'opspractice' for https://opspractice.goatcounter.com
   var FORMSPREE_ID = 'moedrrql';       // your Formspree form ID, e.g. 'xyzabcd' from https://formspree.io/f/xyzabcd
 
+  var VERSION = 'v1.6 · 2026-11-26'; // bump with every update so you can tell when GitHub Pages has refreshed
   var page = /drills/.test(location.pathname) ? 'drills' : 'campaign';
+
+  /* ---------- version label ---------- */
+  var ver = document.createElement('div');
+  ver.textContent = 'Pacific Shield ' + VERSION;
+  ver.setAttribute('aria-label', 'Site version ' + VERSION);
+  ver.style.cssText = 'position:fixed;left:16px;bottom:6px;z-index:59;font:400 .68rem/1 ui-monospace,monospace;color:var(--muted,#777);background:var(--bg,#fff);padding:2px 4px;border-radius:2px;opacity:.85;pointer-events:none';
+  document.body.appendChild(ver);
   var sent = {};
 
   /* ---------- usage counts ---------- */
@@ -89,6 +97,7 @@
       send.disabled = true; send.textContent = 'Sending…';
       var data = new FormData(form);
       data.append('page', page);
+      data.append('version', VERSION);
       var seat = document.querySelector('h1 small');
       if(seat) data.append('screen', seat.textContent);
       fetch('https://formspree.io/f/' + FORMSPREE_ID, {method: 'POST', body: data, headers: {Accept: 'application/json'}})

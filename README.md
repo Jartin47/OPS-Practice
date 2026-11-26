@@ -21,6 +21,8 @@ Some board details are estimates, including the FOS hex positions and where the 
 - **Usage counts** ([GoatCounter](https://www.goatcounter.com), free for non-commercial use, no cookies, no personal data): counts visits, which seat and campaign length people start, which tabs they open, and how many visits pass 1, 5, 15, 30 and 60 minutes on the page. Sign up, pick a site code, and set `GOATCOUNTER_CODE`.
 - **Feedback button** ([Formspree](https://formspree.io), free tier): a Feedback button sends the message to your email without putting your address in the code. Create a form, and set `FORMSPREE_ID` to the ID in its endpoint URL.
 
+The small version label at the bottom left (set by `VERSION` in `site.js`) changes with every update, so you can tell when GitHub Pages has refreshed.
+
 Privacy: visitors see a note in the feedback form that the site counts visits and tool use without cookies or personal details, and that feedback goes to the site owner.
 
 > **Practice aid only.** This is an unofficial study tool, not the official OPS game. It simplifies the rules, and some numbers are estimates read from board photos. Your class rules, the OPS User Guide and your instructors' rulings take priority.
