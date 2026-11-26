@@ -2,7 +2,7 @@
    Both stay off until you fill in the two settings below. */
 (function(){
   'use strict';
-  var GOATCOUNTER_CODE = '';   // your GoatCounter site code, e.g. 'opspractice' for https://opspractice.goatcounter.com
+  var GOATCOUNTER_CODE = 'jartin47';   // your GoatCounter site code, e.g. 'opspractice' for https://opspractice.goatcounter.com
   var FORMSPREE_ID = '';       // your Formspree form ID, e.g. 'xyzabcd' from https://formspree.io/f/xyzabcd
 
   var page = /drills/.test(location.pathname) ? 'drills' : 'campaign';
