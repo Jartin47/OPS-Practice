@@ -146,10 +146,6 @@ const TASKS={
   15:{n:'Base Recovery',pax:10,pp:4,kit:'Engineering (10), rapid repair 4 PP',pre:[6]},
   16:{n:'Logistics Support',pax:2,pp:4,kit:'Supply (2), fuel 2 PP, food 1 PP, water 1 PP',pre:[5,10]}
 };
-const FOS_COLOR={};
-[1,2,3,4,5,6,8,11,15,16,17,20,21,22,23,27,30,31,37,39,42,43,45].forEach(n=>FOS_COLOR[n]='green');
-[7,10,13,14,18,24,25,28,29,32,33,36,38,40,41,44].forEach(n=>FOS_COLOR[n]='yellow');
-[9,12,19,26,34,35].forEach(n=>FOS_COLOR[n]='red');
 const FULL_ACCESS=['Japan','Philippines','Thailand','Korea','Guam (US)'];
 /* op-area hexes: crisis from the EXORD, conflict from the FRAGORD */
 const OP_AREAS={
@@ -165,7 +161,7 @@ const MOBS=[{n:'Kadena AB',c:'Japan',cs:['COBRA','ARROW']},{n:'Andersen AFB',c:'
 const ri=(a,b)=>a+Math.floor(Math.random()*(b-a+1));
 const pick=a=>a[Math.floor(Math.random()*a.length)];
 const chance=p=>Math.random()<p;
-function fosObj(num){const c=Object.keys(COUNTRY_FOS).find(k=>COUNTRY_FOS[k].includes(num));return {c,num,color:FOS_COLOR[num],n:'FOS '+String(num).padStart(2,'0')}}
+function fosObj(num){const c=Object.keys(COUNTRY_FOS).find(k=>COUNTRY_FOS[k].includes(num));return {c,num,n:'FOS '+String(num).padStart(2,'0')}}
 function randFos(filter){const all=[];for(let i=1;i<=45;i++){const f=fosObj(i);if(!filter||filter(f))all.push(f)}return pick(all)}
 const cs=()=>pick(['REACH','ARROW','COBRA','TIDE','ATLAS','HERKY','MOOSE','SAMURAI'])+' '+String(ri(1,29)).padStart(2,'0');
 const fmtU=u=>(Math.round(u*10)/10).toString();
@@ -251,7 +247,7 @@ function genLoad(){
     const pool=[2,3,5,6,9,10,11,12,13,15,16].sort(()=>Math.random()-.5);
     const tasks=pool.slice(0,ri(2,4)).sort((x,y)=>x-y);
     const needPP=tasks.reduce((t,k)=>t+TASKS[k].pp,0),needPax=tasks.reduce((t,k)=>t+TASKS[k].pax,0);
-    const s={kind:'load',fos:randFos(f=>f.color!=='red'||true),fleet,tasks,needPP,needPax,pick:fleet.map(()=>'none')};
+    const s={kind:'load',fos:randFos(),fleet,tasks,needPP,needPax,pick:fleet.map(()=>'none')};
     const b=loadMin(s);if(b&&needPP>=4&&needPax>=8)return s;
   }
 }
@@ -265,8 +261,6 @@ function loadMin(s){
 const FIGHTER_REASONS={
   ok:'Yes, launch the sortie',
   tasks:'No: Establish and Operate tasks are not all complete',
-  gear:'No: red airfield without arresting gear',
-  night:'No: day-only airfield and this is a night turn',
   mx:'No: no maintenance, ammo and fuel crews for this fighter type',
   tokens:'No: missing a bomb, missile or fuel token',
   moved:'No: fighters arrived from the MOB this turn',
@@ -276,15 +270,13 @@ const FIGHTER_REASONS={
 const TASK_NAMES={1:'Bed Down & Sanitation',2:'Power',3:'Command & Control',4:'Contracts',9:'Airfield Operations',10:'Mobility Support',11:'Integrated Combat Turns',12:'Specialized Fueling Ops'};
 function genFighter(){
   for(;;){
-    const fault=chance(.3)?'ok':pick(['tasks','gear','night','mx','tokens','moved','access','area']);
+    const fault=chance(.3)?'ok':pick(['tasks','mx','tokens','moved','access','area']);
     const mob=pick(MOBS),ft=mob.n.startsWith('Andersen')||mob.n.startsWith('Osan')?'F-22':'F-16';
-    const filt=fault==='gear'?(f=>f.color==='red'):fault==='night'?(f=>f.color==='yellow'):fault==='access'?(f=>!FULL_ACCESS.includes(f.c)):null;
+    const filt=fault==='access'?(f=>!FULL_ACCESS.includes(f.c)):null;
     const f=randFos(filt),phase=chance(.5)?'crisis':'conflict';
-    const s={kind:'fighter',fos:f,mob:mob.n,ft,phase,color:f.color,gear:f.color!=='red'||chance(.8),light:f.color==='green'||chance(.4),night:chance(.35),
+    const s={kind:'fighter',fos:f,mob:mob.n,ft,phase,
       missing:null,mx:ft,tokens:{bomb:1,missile:1,fuel:1},moved:false,access:true,target:pick(OP_AREAS[mob.n][phase])};
     if(fault==='tasks')s.missing=pick([1,2,3,4,9,10,11,12]);
-    if(fault==='gear')s.gear=false;
-    if(fault==='night'){s.light=false;s.night=true}
     if(fault==='mx')s.mx=ft==='F-16'?'F-22':'F-16';
     if(fault==='tokens')s.tokens[pick(['bomb','missile','fuel'])]=0;
     if(fault==='moved')s.moved=true;
@@ -297,8 +289,6 @@ function genFighter(){
 }
 function fighterFaults(s){const f=[];
   if(s.missing)f.push('tasks');
-  if(s.color==='red'&&!s.gear)f.push('gear');
-  if(s.night&&!(s.color==='green'||s.light))f.push('night');
   if(s.mx!==s.ft)f.push('mx');
   if(!s.tokens.bomb||!s.tokens.missile||!s.tokens.fuel)f.push('tokens');
   if(s.moved)f.push('moved');
@@ -359,10 +349,7 @@ function renderFos(v){
     body=`<h2>Can ${esc(s.fos.n)} launch an ${s.ft} sortie this turn?</h2>
     <p class="brief">${esc(s.mob)} wants an ${s.ft} sortie from ${esc(s.fos.n)} into hex ${s.target}, within 4 hexes. It's the ${s.phase} phase, so the ${s.phase==='crisis'?'EXORD':'FRAGORD'} sets your op areas. Read the FOS status and make the call.</p>
     <div class="facts">
-      <div class="fact"><div class="k">Airfield</div><div class="v"><span class="chip ${s.color}">${s.color.toUpperCase()}</span> ${s.color==='red'?'C-17/C-130 field':s.color==='yellow'?'Day fighter ops':'Day/night fighter ops'}</div></div>
-      <div class="fact"><div class="k">Arresting gear</div><div class="v">${s.color==='red'?(s.gear?'Deployed':'Not deployed'):'N/A'}</div></div>
-      <div class="fact"><div class="k">Runway lighting</div><div class="v">${s.color==='green'?'Built in':s.light?'Deployed':'Not deployed'}</div></div>
-      <div class="fact"><div class="k">Turn</div><div class="v">${s.night?'Night':'Day'} · ${s.phase}</div></div>
+      <div class="fact"><div class="k">Phase</div><div class="v">${s.phase}</div></div>
       <div class="fact warn"><div class="k">Target hex</div><div class="v">${s.target}</div></div>
       <div class="fact"><div class="k">Fighter crews on site</div><div class="v">${s.mx} MX / AMMO / Fuels</div></div>
       <div class="fact"><div class="k">Tokens brought to CAOC</div><div class="v">${s.tokens.bomb} bomb · ${s.tokens.missile} missile · ${s.tokens.fuel} fuel</div></div>
@@ -395,16 +382,14 @@ function renderFos(v){
       btn.onclick=()=>{state.fosDone=true;state.fosPick=btn.dataset.a;const ok=btn.dataset.a===ans;tally('fos',ok);
         let lines,cite;
         if(s.kind==='fighter'){
-          const W={ok:'All Establish (1–4) and Operate (9–12) tasks are done, the field supports the sortie, crews match the aircraft and all three tokens are on the table.',
+          const W={ok:'All Establish (1–4) and Operate (9–12) tasks are done, crews match the aircraft and all three tokens are on the table.',
             tasks:`Task ${s.missing} (${TASK_NAMES[s.missing]}) isn't complete. Every Establish and Operate task must be done before fighters launch from a FOS.`,
-            gear:'Red fields are assessed for tactical airlift only. Fighters need arresting gear deployed there first.',
-            night:'Yellow fields support day fighter ops only. Night launches need runway lighting deployed.',
             mx:`Maintenance, ammo and fuel crews must match the platform. ${s.mx} crews can't turn an ${s.ft}.`,
             tokens:'Each sortie consumes one bomb, one missile and one fuel token, brought to the CAOC at execution. Without them the fighter misses its takeoff window.',
             moved:'The move from MOB to FOS takes the whole turn. Fighters can fly from the FOS starting next turn.',
             access:'Once a host nation reverses access, no fighter sorties can launch to op areas from that location.',
             area:`MP only count in your tasked hexes. ${esc(s.mob)}'s ${s.phase} op areas (${s.phase==='crisis'?'EXORD':'FRAGORD'}) are ${OP_AREAS[s.mob][s.phase].join(', ')}. Hex ${s.target} isn't one of them.`};
-          lines=[W[ans]];cite='User Guide 3.1.1, 3.6.1, 7.3 · EXORD/FRAGORD 3.D';
+          lines=[W[ans]];cite='User Guide 3.6.1, 7.3 · EXORD/FRAGORD 3.D';
         } else {lines=[s.why];cite=s.cite}
         debrief(v.querySelector('#out'),ok,ok?'Correct':'Not quite',lines,cite);renderFos(v)}});
   }
@@ -594,7 +579,7 @@ function renderRules(v){
       <li>Range 4 hexes and must land every turn. MOB to FOS takes a full turn, declared one turn ahead.</li>
       <li>Sortie costs 1 bomb + 1 missile + 1 fuel. In crisis the bomb and missile come back.</li>
       <li>Needs Establish (1–4) and Operate (9–12) done, plus MX, AMMO and fuel crews for that type.</li>
-      <li>Red field: needs arresting gear. Yellow: day only unless lighting is deployed.</li></ul></section>
+      <li>Airfield color and day or night don't limit fighters: any aircraft can use any FOS.</li></ul></section>
     <section><h3>Risk and combat</h3><ul>
       <li>Risk tokens: 2 per block in crisis, 4 in conflict. Generic d10: 1 fail, 2–4 damaged 1 turn, 5–10 clean.</li>
       <li>Combat: d(strength) vs d(strength), higher wins. F-22 rolls d20.</li>
