@@ -144,7 +144,7 @@ const MOBS={
   Andersen:{n:'Andersen AFB',hex:609,ft:'F-22',cs:['TIDE','HAWK'],note:'Logistics and WRM hub. Big security and port.',lean:{},stock:{fuel:8,food:8,water:8,bomb:10,missile:10}},
   Yokota:{n:'Yokota AB',hex:208,ft:'F-16',cs:['SAMURAI','ATLAS'],note:'Mobility hub. Only 1 ICT (fighter maintenance) kit, so request more from TRANSCOM early.',lean:{11:1},stock:{fuel:8,food:10,water:10,bomb:6,missile:6}},
   Osan:{n:'Osan AB',hex:207,ft:'F-22',cs:['MUSTANG','VIPER'],note:'Extra port, comm and security. No exportable missile defense.',lean:{7:0},stock:{fuel:8,food:8,water:8,bomb:8,missile:8}},
-  JBPHH:{n:'JB Pearl Harbor-Hickam',hex:511,far:true,ft:'F-22',cs:[],note:'Flights and fighter moves take 1 extra turn each way to reach the theater. Out of PLA missile range.',lean:{7:0},stock:{fuel:8,food:8,water:8,bomb:8,missile:8}}};
+  JBPHH:{n:'JB Pearl Harbor-Hickam',hex:511,far:true,ft:'F-22',cs:[],note:'Hawaii to the AOR entry point (hex 511) counts as 1 hex of range each way, not a turn. Out of PLA missile range.',lean:{7:0},stock:{fuel:8,food:8,water:8,bomb:8,missile:8}}};
 const TEAMS=['Kadena','Andersen','Yokota','Osan']; // the four AI wings in the theater roles
 const OP_AREAS={Kadena:{crisis:[602,703,704,705,804],conflict:[704,804,407,507,607]},Andersen:{crisis:[506,507,605,606,607],conflict:[405,406,505,506,605]},
   Yokota:{crisis:[308,407,508,607,708],conflict:[106,107,206,306,307]},Osan:{crisis:[108,207,307,308,407],conflict:[306,405,406,505,506]}};OP_AREAS.JBPHH=OP_AREAS.Osan;
@@ -305,25 +305,27 @@ function locHex(a){return a.loc.k==='mob'?MOBS[G.mob].hex:a.loc.k==='fos'?FOS_HE
 function locName(a){return a.loc.k==='mob'?MOBS[G.mob].n:a.loc.k==='fos'?`FOS ${a.loc.n}`:`airborne over hex ${a.loc.hex}`}
 function destHex(dst){return dst==='mob'?MOBS[G.mob].hex:FOS_HEX[+dst]}
 const farMob=()=>!!(MOBS[G.mob]&&MOBS[G.mob].far);
+// guide 7.2.2.4: the Hawaii leg to the AOR entry point (the JBPHH hex) counts as one hex of movement, not one turn
+const mobLeg=(x,y)=>farMob()&&((x==='mob')!==(y==='mob'))?1:0;
 const C5_ROLL='d20 risk roll: 1-3 crash (aircraft and cargo lost), 4-6 broken 2 turns, 7-10 broken 1 turn, 11-20 no damage';
-function riskNeed(a){if(!a.plan||a.plan.dest==null||a.plan.dest===''||a.broken)return 0;if(a.plan.intent==='airdrop')return 1;if(a.type!=='C-5')return 0;let n=0;const p=a.plan;if(farMob()&&a.loc.k==='mob'&&p.dest!=='mob')return 0;if(p.via)n+=2; // a C-5 lands and takes off at the en route FOS
+function riskNeed(a){if(!a.plan||a.plan.dest==null||a.plan.dest===''||a.broken)return 0;if(a.plan.intent==='airdrop')return 1;if(a.type!=='C-5')return 0;let n=0;const p=a.plan;if(p.via)n+=2; // a C-5 lands and takes off at the en route FOS
   if(a.loc.k==='fos')n++; // takeoff from a FOS
-  if(p.dest!=='mob'){const R=AC[a.type].range,dist=hexDist(locHex(a),destHex(p.dest));if(!(p.intent!=='return'&&dist>R&&(a.loc.k!=='air'||a.loc.transit)))n+=(p.intent==='return'||p.intent==='hold')?2:1}
+  if(p.dest!=='mob'){const R=AC[a.type].range,dist=hexDist(locHex(a),destHex(p.dest))+mobLeg(a.loc.k,p.dest);if(!(p.intent!=='return'&&dist>R&&(a.loc.k!=='air'||a.loc.transit)))n+=(p.intent==='return'||p.intent==='hold')?2:1}
   return n}
 const GRID=[];for(let r=0;r<=9;r++)for(let c=0;c<=11;c++)GRID.push(r*100+c);
 const holdHexes=(center,k)=>k<0?[]:GRID.filter(h=>hexDist(center,h)<=k);
 // Where an aircraft ends the turn airborne (Kyle's ruling): after a download or airdrop it has range - distance - 1 hexes left
 // and can hold over the drop hex or any hex within that; a long flight can hold anywhere within range that still reaches the destination next turn.
-function holdInfo(a){const p=a.plan;if(!p||p.dest==null||p.dest===''||p.dest==='mob'||p.via)return null;const R=AC[a.type].range,from=locHex(a),to=destHex(p.dest),dist=hexDist(from,to);
+function holdInfo(a){const p=a.plan;if(!p||p.dest==null||p.dest===''||p.dest==='mob'||p.via)return null;const R=AC[a.type].range,from=locHex(a),to=destHex(p.dest),x=mobLeg(a.loc.k,p.dest),dist=hexDist(from,to)+x;
   let kind,list;
   if(p.intent==='hold'){kind='hold';list=holdHexes(to,R-dist-1)}
   else if(p.intent==='airdrop'){if(p.hold==null||p.hold==='')return null;kind='airdrop';list=holdHexes(to,R-dist-1)}
-  else if(p.intent!=='return'&&dist>R&&dist<=2*R&&(a.loc.k!=='air'||a.loc.transit)&&!(farMob()&&a.loc.k==='mob')){kind='enroute';list=GRID.filter(h=>h!==from&&hexDist(from,h)<=R&&hexDist(h,to)<=R)}
+  else if(p.intent!=='return'&&dist>R&&dist<=2*R&&(a.loc.k!=='air'||a.loc.transit)){kind='enroute';list=GRID.filter(h=>h!==from&&hexDist(from,h)+x<=R&&hexDist(h,to)<=R)}
   else return null;
   const pick=p.hold!=null&&p.hold!==''?+p.hold:null;const sug=suggestHold(a,kind,list,from,to);
   return {kind,list,sug,hex:pick!=null?pick:sug,bad:pick!=null&&!list.includes(pick),k:R-dist-1}}
 function suggestHold(a,kind,list,from,to){if(!list.length)return null;const home=MOBS[G.mob].hex;const thr=h=>phase()==='conflict'&&threatAt(h)?100:0;
-  if(kind==='enroute'){const L=hexLerp(from,to,AC[a.type].range/hexDist(from,to));if(list.includes(L)&&!thr(L))return L;return list.slice().sort((x,y)=>thr(x)-thr(y)||hexDist(x,to)-hexDist(y,to))[0]}
+  if(kind==='enroute'){const L=hexLerp(from,to,Math.min(1,(AC[a.type].range-mobLeg(a.loc.k,a.plan.dest))/hexDist(from,to)));if(list.includes(L)&&!thr(L))return L;return list.slice().sort((x,y)=>thr(x)-thr(y)||hexDist(x,to)-hexDist(y,to))[0]}
   return list.slice().sort((x,y)=>thr(x)-thr(y)||hexDist(x,home)-hexDist(y,home)||hexDist(x,to)-hexDist(y,to))[0]}
 function pathHexes(from,to){const n=hexDist(from,to),out=[];for(let i=1;i<=n;i++)out.push(hexLerp(from,to,i/n));return out}
 const threatAt=h=>(G.pla[h]||[]).some(t=>t.id>=1&&t.s!=='sj');
@@ -333,7 +335,7 @@ function escortNeed(a){if(phase()!=='conflict'||!a.plan||a.plan.dest==null||a.pl
 function riskLeft(a){let used=0;for(const b of G.aircraft){if(b===a)break;used+=riskNeed(b)}return (G.riskTok||0)-used}
 function planCheck(a){ // returns {ok, msgs, intent:'land'|'return'|'enroute', ...}
   const p=a.plan;if(a.broken||!p||p.dest==null||p.dest==='')return {ok:true,hold:true,msgs:[]};
-  const msgs=[];const R=AC[a.type].range;const from=locHex(a),to=destHex(p.dest);const dist=hexDist(from,to);
+  const msgs=[];const R=AC[a.type].range;const from=locHex(a),to=destHex(p.dest);const dist=hexDist(from,to)+mobLeg(a.loc.k,p.dest);
   const items=p.load||[];const tot=loadTotal(items);const cfg=fitCfg(a.type,tot);
   if(items.length&&!cfg){const cl=closestCfg(a.type,tot);msgs.push(`Overloaded: ${tot.pp} PP + ${tot.pax} PAX doesn't fit any ${a.type} configuration. Closest is ${cl.c.n} (${cl.c.pp} PP + ${cl.c.pax} PAX), which is ${cl.o.txt}.`)}
   if(String(p.dest)===(a.loc.k==='fos'?String(a.loc.n):a.loc.k))msgs.push('Already there.');
@@ -355,11 +357,6 @@ function planCheck(a){ // returns {ok, msgs, intent:'land'|'return'|'enroute', .
     else if(o.runway>=2&&a.type!=='C-130')msgs.push(`FOS ${o.num} is C-130 only after damage. This ${a.type} is stuck there until the runway is repaired.`);
     if(!canLand(fosCountry(o.num)))msgs.push(`${fosCountry(o.num)} withdrew landing rights. This aircraft is trapped at FOS ${o.num} until access returns.`);
     if(isDown(o))msgs.push(`FOS ${o.num} is inoperable this turn while you survey another airfield.`)}}
-  if(farMob()&&a.loc.k==='mob'&&p.dest!=='mob'){ // video: aircraft departing Pearl Harbor take one turn to transit to the AOR entry point
-    if(intent!=='land'||p.via)msgs.push('Flights out of Hawaii spend this turn transiting to the AOR entry point. Next turn they fly on and land, so no airdrop, round trip or en route stop on this leg.');
-    if(!fosByNum(+p.dest))msgs.push('Not one of your FOS.');
-    items.forEach(it=>{if(it.fos!==+p.dest)msgs.push(`${itemLabel(it)} is loaded on a flight to the wrong place.`)});
-    return {ok:!msgs.length,msgs,intent:'transit',dist,cfg,tot}}
   const via=p.via!=null&&p.via!==''?fosByNum(+p.via):null;
   if(p.via!=null&&p.via!==''){ // video: two stops in one turn, and a download at the en route stop costs 1 hex of range
     if(!via)msgs.push('The en route stop is not one of your FOS.');
@@ -367,7 +364,7 @@ function planCheck(a){ // returns {ok, msgs, intent:'land'|'return'|'enroute', .
       if(a.loc.k!=='mob')msgs.push('Two-stop flights start at the MOB with both loads on board.');
       if(intent!=='land'||p.dest==='mob')msgs.push('A two-stop flight downloads at the en route stop, then lands to stay at its destination FOS.');
       if(String(vn)===String(p.dest))msgs.push('The en route stop and the destination are the same FOS.');
-      const d1=hexDist(from,fosHex(via)),d2=hexDist(fosHex(via),to);if(d1+1+d2>R)msgs.push(`Two stops need ${d1} + 1 + ${d2} = ${d1+1+d2} hexes (the download at the en route stop costs 1 hex). A ${a.type} flies ${R}.`);
+      const d1=hexDist(from,fosHex(via))+mobLeg(a.loc.k,'fos'),d2=hexDist(fosHex(via),to);if(d1+1+d2>R)msgs.push(`Two stops need ${d1} + 1 + ${d2} = ${d1+1+d2} hexes (the download at the en route stop costs 1 hex). A ${a.type} flies ${R}.`);
       if(!canLand(fosCountry(vn)))msgs.push(`${fosCountry(vn)} has denied access. No landing rights at FOS ${vn}.`);
       if(isDown(via))msgs.push(`FOS ${vn} is inoperable this turn while you survey another airfield.`);
       {const st=G.space&&G.space.storm;if(st&&st.t===G.turn&&st.z===zoneOfFos(vn)&&!covers(st.z,'WX'))msgs.push(`Typhoon over GEO zone ${st.z} and no weather satellite coverage. The stop at FOS ${vn} is cancelled this turn.`)}
@@ -451,10 +448,9 @@ function executeTurn(){
       download(a,f);const hh=c.holdHex;if(r<=4){a.brokenT=Math.max(a.brokenT||0,1);log('bad',`${a.cs} airdrops the repair team at FOS ${f.num} but is damaged (risk roll ${r}): broken for 1 turn${hh!=null?', so it skips the hold':''} and returns to ${locName(a)}.`)}
       else if(hh!=null){a.loc={k:'air',hex:hh};a.airborne=1;log('ok',`${a.cs} airdrops the repair team at FOS ${f.num} (risk roll ${r}), then holds en route over hex ${hexLabel(hh)}. It must land next turn.`)}
       else log('ok',`${a.cs} airdrops the repair team at FOS ${f.num} (risk roll ${r}) and returns to ${locName(a)}.`);a.plan=null;return}
-    if(c.intent==='transit'){a.loc={k:'air',hex:MOBS[G.mob].hex,dest:a.plan.dest,transit:'out'};a.airborne=0;log('acc',`${a.cs} (${a.type}) leaves Hawaii and spends the turn transiting to the AOR entry point (hex ${MOBS[G.mob].hex}). It flies on to FOS ${a.plan.dest} next turn.`);a.plan={dest:a.plan.dest,intent:'land',load:[]};return}
     if(a.plan.via){const v=fosByNum(+a.plan.via);if(a.type==='C-5'&&!c5Risk(a,`landing at FOS ${v.num}`))return;const had=a.cargo.some(it=>it.fos===v.num);download(a,v);if(a.type==='C-5'&&!c5Risk(a,`takeoff from FOS ${v.num}`))return;log('ok',`${a.cs} stops at FOS ${v.num}${had?' and downloads':''}, then flies on.`)}
     const from=locHex(a),to=destHex(a.plan.dest);
-    if(c.intent==='enroute'){const R=AC[a.type].range;const hex=c.holdHex??hexLerp(from,to,R/c.dist);a.loc={k:'air',hex,dest:a.plan.dest};a.airborne=1;
+    if(c.intent==='enroute'){const R=AC[a.type].range;const hex=c.holdHex??hexLerp(from,to,Math.min(1,(R-mobLeg(a.loc.k,a.plan.dest))/hexDist(from,to)));a.loc={k:'air',hex,dest:a.plan.dest};a.airborne=1;
       log('acc',`${a.cs} (${a.type}) is en route over hex ${hexLabel(hex)}, ${hexDist(hex,to)} hex${hexDist(hex,to)>1?'es':''} short of ${a.plan.dest==='mob'?MOBS[G.mob].n:'FOS '+a.plan.dest}. It must land next turn.`);a.plan={dest:a.plan.dest,intent:'land',load:[]};return}
     const destName=a.plan.dest==='mob'?MOBS[G.mob].n:`FOS ${a.plan.dest}`;
     if(a.type==='C-5'&&a.plan.dest!=='mob'){if(!c5Risk(a,`landing at FOS ${a.plan.dest}`))return;}
@@ -462,7 +458,6 @@ function executeTurn(){
     if(a.type==='C-5'&&a.plan.dest!=='mob'&&(c.intent==='return'||c.intent==='hold')){if(!c5Risk(a,`takeoff from FOS ${a.plan.dest}`))return}
     if(c.intent==='hold'){a.loc={k:'air',hex:c.holdHex};a.airborne=1;log('ok',`${a.cs} downloads at ${destName} and returns partway, ending the turn en route over hex ${hexLabel(c.holdHex)}. It must land next turn.`);a.plan=null;return}
     if(c.intent==='return'){log('ok',`${a.cs} downloads at ${destName} and returns to ${locName(a)}.`)}
-    else if(a.plan.dest==='mob'&&farMob()&&!(a.loc.k==='air'&&a.loc.transit==='home')){a.loc={k:'air',hex:MOBS[G.mob].hex,dest:'mob',transit:'home'};a.airborne=0;log('acc',`${a.cs} reaches the AOR entry point and spends next turn transiting home to Hawaii.`);a.plan={dest:'mob',intent:'land',load:[]};return}
     else{a.loc=a.plan.dest==='mob'?{k:'mob'}:{k:'fos',n:+a.plan.dest};a.airborne=0;log('ok',`${a.cs} lands at ${destName}${c.dist?` (${c.dist} hex${c.dist>1?'es':''})`:''}.`)}
     a.plan=null;
   });
@@ -473,7 +468,7 @@ function executeTurn(){
   G.moves.filter(m=>!m.done).forEach(m=>{if(m.wait>0){m.wait--;log('acc',`${m.n} ${MOBS[G.mob].ft}s reach the AOR entry point on their way to FOS ${m.to}.`);return}m.done=true;const f=fosByNum(m.to);if(f){f.fighters+=m.n;log('ok',`${m.n} ${MOBS[G.mob].ft}s arrive at FOS ${m.to}. They can fly sorties next turn.`)}});
   G.moves=G.moves.filter(m=>!m.done);
   if((UI.pendingMoves||[]).length&&mobRw()>=1){log('bad',`Fighter moves cancelled: the ${MOBS[G.mob].n} runway is damaged this turn.`);UI.pendingMoves=[]}
-  (UI.pendingMoves||[]).forEach(m=>{G.fightersMob-=m.n;G.moves.push({to:m.to,n:m.n,wait:farMob()?1:0});log('acc',`${m.n} ${MOBS[G.mob].ft}s depart ${MOBS[G.mob].n} for FOS ${m.to}.`)});
+  (UI.pendingMoves||[]).forEach(m=>{G.fightersMob-=m.n;G.moves.push({to:m.to,n:m.n,wait:0});log('acc',`${m.n} ${MOBS[G.mob].ft}s depart ${MOBS[G.mob].n} for FOS ${m.to}.`)});
   UI.pendingMoves=[];
   // 3. Sorties
   (UI.sorties||[]).forEach(s=>flySorties(s));UI.sorties=[];
@@ -586,7 +581,7 @@ function randomEvent(){G.aircraft.forEach(a=>{if(a.brokenT>0){a.broken=1;a.broke
 // Guide 7.3.4: fighters have a total range of four hexes: out to the target plus on to where they land.
 const FR=4;
 function sortieLandHex(s){return s.land==='mob'?MOBS[G.mob].hex:s.land!=null&&s.land!==''?FOS_HEX[+s.land]:FOS_HEX[+s.fos]}
-function sortieRange(fosNum,hex,land){const from=FOS_HEX[+fosNum];const lh=land==='mob'?MOBS[G.mob].hex:land!=null&&land!==''?FOS_HEX[+land]:from;return hexDist(from,hex)+hexDist(hex,lh)}
+function sortieRange(fosNum,hex,land){const from=FOS_HEX[+fosNum];const lh=land==='mob'?MOBS[G.mob].hex:land!=null&&land!==''?FOS_HEX[+land]:from;return hexDist(from,hex)+hexDist(hex,lh)+(land==="mob"&&farMob()?1:0)}
 function landWhy(L){const w=[];if(L.runway>0)w.push('runway damaged');if(!canLand(fosCountry(L.num)))w.push('no landing rights');
   if(isDown(L))w.push('inoperable this turn');return w}
 function landRoom(L){return mog(L).f-L.fighters-G.moves.filter(m=>!m.done&&m.to===L.num).reduce((n,m)=>n+m.n,0)}
@@ -1332,7 +1327,7 @@ function mapSVG(){
 function fosPanel(){
   const free=4-G.fos.length;
   let h=`<div class="stack"><p class="help">Select up to <b>4 FOS</b> (click a hex on the map or use the list). Each new FOS gets <b>5 free RFIs</b>. Tasks 1–4 and 9–12 must be complete before fighters fly from it. Each task needs its team (people) and its equipment (pallets) on site. Host nation support from RFIs shrinks or fills them.</p>
-  <div class="row"><select id="addfos" aria-label="Add a FOS"><option value="">Add a FOS (${free} slot${free===1?'':'s'} left)…</option>${Object.keys(FOS_HEX).map(Number).filter(n=>!fosByNum(n)).map(n=>{const c=fosCountry(n);const dist=hexDist(MOBS[G.mob].hex,FOS_HEX[n]);return `<option value="${n}">FOS ${n} · ${c} · hex ${FOS_HEX[n]} · ${dist} from MOB${G.access[c]?'':' · NO ACCESS'}</option>`}).join('')}</select><button class="btn sm" id="addfosbtn" ${free?'':'disabled'}>Select</button></div>`;
+  <div class="row"><select id="addfos" aria-label="Add a FOS"><option value="">Add a FOS (${free} slot${free===1?'':'s'} left)…</option>${Object.keys(FOS_HEX).map(Number).filter(n=>!fosByNum(n)).map(n=>{const c=fosCountry(n);const dist=hexDist(MOBS[G.mob].hex,FOS_HEX[n])+mobLeg("mob","fos");return `<option value="${n}">FOS ${n} · ${c} · hex ${FOS_HEX[n]} · ${dist} from MOB${G.access[c]?'':' · NO ACCESS'}</option>`}).join('')}</select><button class="btn sm" id="addfosbtn" ${free?'':'disabled'}>Select</button></div>`;
   if(!G.fos.length)h+=`<p class="muted small">No FOS yet. Good first picks sit 2–3 hexes from your MOB, in a country with access, within 4 hexes of your op areas, and are green.</p>`;
   if(G.fos.length>=4)h+=surveyBox();
   G.fos.slice().sort((a,b)=>(UI.selFos===b.num)-(UI.selFos===a.num)).forEach(f=>{h+=fosCard(f)});
@@ -1355,7 +1350,7 @@ function fosCard(f){
   const unasked=RFI_CATS.filter(k=>f.rfi[k]==null);const pickSet=UI.rfiPick[f.num]||[];const canAsk=f.asked<5;
   const nearOps=opAreas().filter(h=>hexDist(fosHex(f),h)<=4);
   return `<div class="fos" id="fos-${f.num}">
-    <div class="fos-head"><h2>FOS ${f.num} <span class="muted small">${c} · hex ${fosHex(f)} · ${hexDist(MOBS[G.mob].hex,fosHex(f))} hex from MOB</span></h2>
+    <div class="fos-head"><h2>FOS ${f.num} <span class="muted small">${c} · hex ${fosHex(f)} · ${hexDist(MOBS[G.mob].hex,fosHex(f))+mobLeg("mob","fos")} hex from MOB</span></h2>
       <div class="row"><span class="pill">MOG ${M.l}</span>${G.access[c]?'':'<span class="pill bad">No access</span>'}${f.runway?`<span class="pill bad">Runway: ${['','C-17/C-130 only','C-130 only','non-operational','destroyed'][f.runway]}</span>`:''}${(f.ramp??100)<100?`<span class="pill bad">Ramp ${f.ramp}%</span>`:''}${!G.access[c]&&canLand(c)?`<span class="pill warn">Landing rights end in ${G.lostAcc[c]+2-G.turn} turn(s)</span>`:''}${isDown(f)?'<span class="pill warn">Standing down this turn</span>':''}
       <span class="pill ${ready.length?'':'ok'}">${ready.length?'Fighters: not ready':'Fighters: READY'}</span>
       <button class="btn sm" data-drop="${f.num}">Abandon</button></div></div>
@@ -1427,7 +1422,7 @@ function atoPanel(){
     h+=`<div class="row"><select data-dest="${a.id}" aria-label="Destination for ${esc(a.cs)}"><option value="">Hold this turn</option>${dests.map(([v,l])=>`<option value="${v}" ${String(p.dest)===v?'selected':''}>${esc(l)}</option>`).join('')}</select>
       ${p.dest&&p.dest!=='mob'&&a.loc.k!=='air'?(fosByNum(+p.dest)&&fosByNum(+p.dest).runway>=3&&a.type!=='C-5'&&a.loc.k==='mob'?`<select data-intent="${a.id}" aria-label="Intent"><option value="airdrop" selected>Airdrop repair team (risk token)</option></select>`:`<select data-intent="${a.id}" aria-label="Intent">${!room[+p.dest]||room[+p.dest].land||p.intent!=='return'?`<option value="land" ${p.intent!=='return'?'selected':''}>Land and stay${room[+p.dest]&&!room[+p.dest].land?' (over MOG)':''}</option>`:''}<option value="return" ${p.intent==='return'?'selected':''}>Download and return</option><option value="hold" ${p.intent==='hold'?'selected':''}>Download and return partway (end en route)</option></select>`):''}
       ${holdSelect(a)}
-      ${a.loc.k==='mob'&&p.dest&&p.dest!=='mob'&&p.intent==='land'&&!farMob()&&G.fos.length>1?`<select data-via="${a.id}" aria-label="En route stop for ${esc(a.cs)}"><option value="">No en route stop</option>${G.fos.filter(f=>String(f.num)!==String(p.dest)).map(f=>`<option value="${f.num}" ${String(p.via)===String(f.num)?'selected':''}>Stop first at FOS ${f.num} · ${hexDist(locHex(a),fosHex(f))} + 1 + ${hexDist(fosHex(f),destHex(p.dest))} hexes</option>`).join('')}</select>`:''}
+      ${a.loc.k==='mob'&&p.dest&&p.dest!=='mob'&&p.intent==='land'&&G.fos.length>1?`<select data-via="${a.id}" aria-label="En route stop for ${esc(a.cs)}"><option value="">No en route stop</option>${G.fos.filter(f=>String(f.num)!==String(p.dest)).map(f=>`<option value="${f.num}" ${String(p.via)===String(f.num)?'selected':''}>Stop first at FOS ${f.num} · ${hexDist(locHex(a),fosHex(f))} + 1 + ${hexDist(fosHex(f),destHex(p.dest))} hexes</option>`).join('')}</select>`:''}
       ${hidden.length?`<span class="small muted">Hidden, MOG full: FOS ${hidden.join(', ')}</span>`:''}
       ${c.hold?'':c.ok?`<span class="pill ok">${c.intent==='transit'?'Transit to the AOR entry: flies on next turn':c.intent==='hold'?`Returns partway to hex ${hexLabel(c.holdHex)}: must land next turn`:c.intent==='airdrop'&&c.holdHex!=null?`Airdrop, then holds over hex ${hexLabel(c.holdHex)}`:p.via?'Two stops OK':c.intent==='enroute'?'En route: lands next turn':c.intent==='return'?'Round trip OK':c.intent==='airdrop'?'Airdrop OK: d10 risk roll':'OK'}</span>`:''}</div>`;
     if(!c.ok)h+=`<div class="small" style="color:var(--bad)">${c.msgs.map(esc).join('<br>')}</div>`;
